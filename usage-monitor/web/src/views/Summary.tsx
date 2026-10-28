@@ -139,8 +139,9 @@ function DayCharts({ days }: { days: DayUsage[] }) {
       data: days.map((d) => d.day),
       valueFormatter: (day: string) => formatDay(day),
       tickLabelStyle: { fontSize: 11 },
-      // Thin the labels out rather than letting 30 of them collide.
-      tickLabelInterval: (_: string, index: number) => days.length <= 10 || index % Math.ceil(days.length / 8) === 0,
+      // Labels that would collide at the chart's actual width are skipped, for 7 days on a phone as for 30 on a desktop.
+      tickLabelInterval: 'auto' as const,
+      tickLabelMinGap: 10,
     },
   ];
   const common = {
