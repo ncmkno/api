@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { T0, sessions } from '../test/fixtures';
 import { calledUrls, renderWithTheme, stubApi } from '../test/utils';
 import { resizeWindow } from '../desktopWindow';
-import { COLLAPSED_SIZE, EXPANDED_SIZE, Widget } from './Widget';
+import { BUILD_CHECK_MS, COLLAPSED_SIZE, EXPANDED_SIZE, Widget } from './Widget';
 
 vi.mock('../desktopWindow', () => ({ resizeWindow: vi.fn() }));
 
@@ -29,7 +29,13 @@ const tools = {
   ],
 };
 
+const yesterday = {
+  byDay: [{ day: '2026-10-27', requests: 9, tools: 3, input: 10, output: 10, cacheRead: 0, cacheWrite: 0, costUsd: 4.2 }],
+  byModel: [],
+};
+
 function api(url: string) {
+  if (url.startsWith('/api/summary') && url.includes('&to=')) return { body: yesterday };
   if (url.startsWith('/api/tools')) return { body: tools };
   if (url.startsWith('/api/summary')) return { body: today };
   if (url.startsWith('/api/sessions')) return { body: sessions };
@@ -168,6 +174,55 @@ describe('Widget', () => {
     const calls = await screen.findByRole('list', { name: 'Each call' });
     await waitFor(() => expect(within(calls).getAllByRole('listitem')).toHaveLength(1));
     expect(within(calls).getByLabelText('Repeated 4 times')).toHaveTextContent('×4');
+  });
+
+  it("shows yesterday's cost beside today's for a reference point", async () => {
+    vi.useFakeTimers({ now: T0, toFake: ['Date'] });
+    const fetchMock = stubApi(api);
+    renderWithTheme(<Widget />);
+    expect(await screen.findByLabelText('Cost yesterday')).toHaveTextContent('Yesterday $4.20');
+    const midnight = new Date(T0);
+    midnight.setHours(0, 0, 0, 0);
+    expect(calledUrls(fetchMock)).toContain(`/api/summary?from=${midnight.getTime() - 86_400_000}&to=${midnight.getTime() - 1}`);
+  });
+
+  it('sizes the window for the compact card when it loads, so a reload never leaves an expanded window behind', async () => {
+    stubApi(api);
+    renderWithTheme(<Widget />);
+    await screen.findByRole('region', { name: 'Usage' });
+    expect(resizeWindow).toHaveBeenCalledWith(...COLLAPSED_SIZE);
+  });
+
+  it('says "Nothing yesterday" rather than a dash when yesterday has no usage', async () => {
+    stubApi((url) => (url.includes('&to=') ? { body: { byDay: [], byModel: [] } } : api(url)));
+    renderWithTheme(<Widget />);
+    expect(await screen.findByLabelText('Cost yesterday')).toHaveTextContent(/^Nothing yesterday$/);
+  });
+
+  it('reloads itself when the server starts serving a new build', async () => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...window.location, reload });
+    document.head.insertAdjacentHTML('beforeend', '<script type="module" src="./assets/index-OLD.js" data-test></script>');
+    let html = '<script type="module" crossorigin src="./assets/index-OLD.js"></script>';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === './') return { ok: true, status: 200, text: async () => html } as Response;
+        const reply = api(url);
+        return { ok: true, status: 200, json: async () => reply.body } as Response;
+      }),
+    );
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    renderWithTheme(<Widget />);
+
+    await vi.advanceTimersByTimeAsync(BUILD_CHECK_MS);
+    expect(reload).not.toHaveBeenCalled();
+
+    html = '<script type="module" crossorigin src="./assets/index-NEW.js"></script>';
+    await vi.advanceTimersByTimeAsync(BUILD_CHECK_MS);
+    expect(reload).toHaveBeenCalledTimes(1);
+    document.querySelector('script[data-test]')?.remove();
   });
 });
 

@@ -11,6 +11,9 @@ import { usePolling } from '../usePolling';
 export const COLLAPSED_SIZE = [300, 124] as const;
 export const EXPANDED_SIZE = [340, 460] as const;
 const RECENT = 5;
+/** How often the widget checks whether the server has a newer build of this page. */
+export const BUILD_CHECK_MS = 60_000;
+const DAY_MS = 86_400_000;
 const TOOL_CALLS = 200;
 
 type View = 'compact' | 'details' | 'tools';
@@ -175,17 +178,42 @@ function ToolCalls({ from, onBack }: { from: number; onBack: () => void }) {
   );
 }
 
+/**
+ * The desktop window keeps one page open for days, so it would never see a dashboard update.
+ * Once a minute it reads the served index.html and reloads when that names a different script bundle.
+ */
+function useReloadOnNewBuild() {
+  useEffect(() => {
+    const running = document.querySelector('script[type="module"][src*="assets/index-"]')?.getAttribute('src');
+    if (!running) return;
+    const timer = setInterval(() => {
+      void fetch('./', { cache: 'no-store' })
+        .then((res) => res.text())
+        .then((html) => {
+          const served = /src="([^"]*assets\/index-[^"]+\.js)"/.exec(html)?.[1];
+          if (served && served !== running) window.location.reload();
+        })
+        .catch(() => {});
+    }, BUILD_CHECK_MS);
+    return () => clearInterval(timer);
+  }, []);
+}
+
 export function Widget() {
   const from = startOfToday();
   const summary = usePolling(`widget-summary:${from}`, (signal) => fetchSummary({ from }, signal));
   const recent = usePolling('widget-recent', (signal) => fetchSessions(RECENT, signal));
+  const before = usePolling(`widget-yesterday:${from}`, (signal) => fetchSummary({ from: from - DAY_MS, to: from - 1 }, signal));
+  useReloadOnNewBuild();
   const [view, setView] = useState<View>('compact');
   const expanded = view !== 'compact';
 
-  // The desktop window is transparent; only the card should show.
+  // The desktop window is transparent; only the card should show. The page always starts compact, so the
+  // window does too, even when a reload (a new build) happens while it was expanded.
   useEffect(() => {
     document.documentElement.style.background = 'transparent';
     document.body.style.background = 'transparent';
+    resizeWindow(...COLLAPSED_SIZE);
   }, []);
 
   const toggle = (next: boolean) => {
@@ -201,6 +229,8 @@ export function Widget() {
   const tokens = sum((d) => d.input + d.output);
   const requests = sum((d) => d.requests);
   const session = recent.data?.[0];
+  const yesterdayPriced = (before.data?.byDay ?? []).filter((d) => d.costUsd !== null);
+  const yesterdayCost = yesterdayPriced.length > 0 ? yesterdayPriced.reduce((n, d) => n + (d.costUsd ?? 0), 0) : null;
   const offline = summary.error !== undefined && summary.data === undefined;
 
   if (view === 'tools') return <ToolCalls from={from} onBack={() => setView('details')} />;
@@ -217,11 +247,23 @@ export function Widget() {
           Today
         </span>
         <span className="flex items-center gap-2">
-          {offline && (
+          {offline ? (
             <span className="flex items-center gap-1 text-[0.6875rem] font-medium text-[#ff453a]">
               <span aria-hidden className="size-1.5 rounded-full bg-current" />
               API offline
             </span>
+          ) : (
+            before.data && (
+              <span aria-label="Cost yesterday" data-tauri-drag-region className="text-[0.6875rem] font-medium text-[var(--label-2)]">
+                {before.data.byDay.length === 0 ? (
+                  'Nothing yesterday'
+                ) : (
+                  <>
+                    Yesterday <span className="figure">{formatUsd(yesterdayCost)}</span>
+                  </>
+                )}
+              </span>
+            )
           )}
           {expanded && (
             <IconButton label="Collapse" title="Collapse (or double-click)" path="M3 7.5 6 4.5l3 3" onClick={() => toggle(false)} />
