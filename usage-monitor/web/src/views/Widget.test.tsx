@@ -18,7 +18,19 @@ const today = {
   ],
 };
 
+const tools = {
+  byTool: [
+    { tool: 'Bash', count: 7 },
+    { tool: 'Read', count: 3 },
+  ],
+  calls: [
+    { ts: T0, tool: 'Bash', session: 'sess-newest', agent: 'main', label: '', cwd: '/home/dev/projects/alpha/api/usage-monitor' },
+    { ts: T0 - 60_000, tool: 'Read', session: 'sess-newest', agent: 'a1', label: 'Explore: find routes', cwd: '/tmp/scratch' },
+  ],
+};
+
 function api(url: string) {
+  if (url.startsWith('/api/tools')) return { body: tools };
   if (url.startsWith('/api/summary')) return { body: today };
   if (url.startsWith('/api/sessions')) return { body: sessions };
   return { status: 404 };
@@ -108,5 +120,37 @@ describe('Widget', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Collapse' }));
     expect(screen.queryByRole('region', { name: 'Usage details' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Cost today')).toBeInTheDocument();
+  });
+
+  it('opens every tool call from the Tools figure in the expanded view, and goes back', async () => {
+    const fetchMock = stubApi(api);
+    renderWithTheme(<Widget />);
+    fireEvent.doubleClick(await screen.findByRole('region', { name: 'Usage' }));
+    expect(calledUrls(fetchMock).some((u) => u.startsWith('/api/tools'))).toBe(false); // only fetched when opened
+
+    fireEvent.click(await screen.findByRole('button', { name: /Tools today/ }));
+    const view = await screen.findByRole('region', { name: 'Tool calls' });
+
+    const byTool = within(view).getByRole('list', { name: 'Calls per tool' });
+    expect(within(byTool).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Bash7', 'Read3']);
+
+    const calls = await within(view).findByRole('list', { name: 'Each call' });
+    const [first, second] = within(calls).getAllByRole('listitem') as [HTMLElement, HTMLElement];
+    expect(first).toHaveTextContent('Bash');
+    expect(first).toHaveTextContent('main');
+    expect(second).toHaveTextContent('Explore: find routes');
+    expect(second).toHaveTextContent('/tmp/scratch');
+
+    fireEvent.click(within(view).getByRole('button', { name: 'Back' }));
+    expect(await screen.findByRole('region', { name: 'Usage details' })).toBeInTheDocument();
+  });
+
+  it('a double-click in the tool calls view does not collapse the widget', async () => {
+    stubApi(api);
+    renderWithTheme(<Widget />);
+    fireEvent.doubleClick(await screen.findByRole('region', { name: 'Usage' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Tools today/ }));
+    fireEvent.doubleClick(await screen.findByRole('region', { name: 'Tool calls' }));
+    expect(screen.getByRole('region', { name: 'Tool calls' })).toBeInTheDocument();
   });
 });

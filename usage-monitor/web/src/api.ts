@@ -56,6 +56,22 @@ export interface Summary {
   byModel: ModelUsage[];
 }
 
+export interface ToolCall {
+  ts: number;
+  tool: string;
+  session: string;
+  /** "main" for the main thread, else the subagent id. */
+  agent: string;
+  /** '' when unknown. */
+  label: string;
+  cwd: string | null;
+}
+
+export interface Tools {
+  byTool: ToolCount[];
+  calls: ToolCall[];
+}
+
 export class ApiError extends Error {
   readonly status?: number;
   constructor(message: string, status?: number) {
@@ -97,4 +113,11 @@ export function fetchSummary(range: { from?: number; to?: number }, signal?: Abo
   if (range.to !== undefined) params.set('to', String(range.to));
   const query = params.toString();
   return get(`/api/summary${query ? `?${query}` : ''}`, signal);
+}
+
+export function fetchTools(range: { from?: number; limit?: number }, signal?: AbortSignal): Promise<Tools> {
+  const params = new URLSearchParams();
+  if (range.from !== undefined) params.set('from', String(range.from));
+  if (range.limit !== undefined) params.set('limit', String(range.limit));
+  return get(`/api/tools?${params}`, signal);
 }

@@ -9,6 +9,8 @@ import { parseBatch, ValidationError, type MonitorEvent } from './events.ts';
 const MAX_BODY_BYTES = 1024 * 1024;
 const DEFAULT_SESSION_LIMIT = 50;
 const MAX_SESSION_LIMIT = 500;
+const DEFAULT_TOOL_LIMIT = 200;
+const MAX_TOOL_LIMIT = 1000;
 
 const IMMUTABLE_CACHE = 'public, max-age=31536000, immutable';
 const NO_STORE = 'no-store';
@@ -95,6 +97,17 @@ export function createHandler(db: DatabaseSync, options: HandlerOptions = {}) {
       handlers: {
         GET: ({ res, url }) =>
           sendJson(res, 200, reads.summary(timeParam(url, 'from', Number.MIN_SAFE_INTEGER), timeParam(url, 'to', Number.MAX_SAFE_INTEGER))),
+      },
+    },
+    {
+      pattern: /^\/api\/tools$/,
+      handlers: {
+        GET: ({ res, url }) =>
+          sendJson(
+            res,
+            200,
+            reads.tools(timeParam(url, 'from', Number.MIN_SAFE_INTEGER), timeParam(url, 'to', Number.MAX_SAFE_INTEGER), toolLimit(url)),
+          ),
       },
     },
     { pattern: /^\/$/, handlers: { GET: ({ res }) => serveIndex(res, distDir) } },
@@ -278,7 +291,25 @@ function createReads(db: DatabaseSync) {
     FROM usage_event WHERE ts BETWEEN :from AND :to
     GROUP BY model ORDER BY costUsd DESC, sum(input + output + cache_read + cache_write) DESC, model`);
 
+  const toolCounts = db.prepare(`
+    SELECT tool, count(*) AS count FROM tool_call WHERE ts BETWEEN :from AND :to
+    GROUP BY tool ORDER BY count DESC, tool`);
+
+  // Each call with its session's directory and its agent's label; the event store keeps no arguments.
+  const toolCalls = db.prepare(`
+    SELECT c.ts AS ts, c.tool AS tool, c.session AS session, c.agent AS agent, coalesce(a.label, '') AS label, s.cwd AS cwd
+    FROM tool_call c
+    LEFT JOIN agent a ON a.session = c.session AND a.agent = c.agent
+    LEFT JOIN session s ON s.id = c.session
+    WHERE c.ts BETWEEN :from AND :to
+    ORDER BY c.ts DESC, c.rowid DESC
+    LIMIT :limit`);
+
   return {
+    tools: (from: number, to: number, limit: number) => ({
+      byTool: toolCounts.all({ from, to }),
+      calls: toolCalls.all({ from, to, limit }),
+    }),
     sessions: (limit: number) =>
       listSessions.all({ limit }).map((row) => ({ ...row, models: JSON.parse(row.models as string) as string[] })),
     sessionDetail(session: string) {
@@ -298,6 +329,16 @@ function sessionLimit(url: URL): number {
   const limit = /^\d+$/.test(raw) ? Number(raw) : NaN;
   if (!(limit >= 1 && limit <= MAX_SESSION_LIMIT)) {
     throw new HttpError(400, `limit must be an integer from 1 to ${MAX_SESSION_LIMIT}`);
+  }
+  return limit;
+}
+
+function toolLimit(url: URL): number {
+  const raw = url.searchParams.get('limit');
+  if (raw === null) return DEFAULT_TOOL_LIMIT;
+  const limit = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!(limit >= 1 && limit <= MAX_TOOL_LIMIT)) {
+    throw new HttpError(400, `limit must be an integer from 1 to ${MAX_TOOL_LIMIT}`);
   }
   return limit;
 }

@@ -467,6 +467,35 @@ describe('read routes', () => {
       });
     }));
 
+  test('GET /api/tools counts calls per tool and lists each call newest first, with its session and agent', () =>
+    withService(async (service) => {
+      await service.post(fixtureEvents());
+      const reply = await service.get('/api/tools');
+      assert.equal(reply.status, 200);
+      // Bash 2, Read 2, Edit 2 (sess-a Edit + sess-b Edit): ties by name
+      assert.deepEqual(reply.json.byTool, [
+        { tool: 'Bash', count: 2 }, { tool: 'Edit', count: 2 }, { tool: 'Read', count: 2 },
+      ]);
+      assert.equal(reply.json.calls.length, 6);
+      assert.deepEqual(reply.json.calls[0], {
+        ts: DAY2 + 5 * HOUR, tool: 'Edit', session: 'sess-b', agent: 'main', label: '', cwd: null,
+      });
+      assert.deepEqual(reply.json.calls[1], {
+        ts: DAY2 + HOUR, tool: 'Read', session: 'sess-a', agent: 'sub-1', label: 'explore', cwd: '/work/a',
+      });
+    }));
+
+  test('GET /api/tools bounds by from/to and caps the call list with limit', () =>
+    withService(async (service) => {
+      await service.post(fixtureEvents());
+      const day2 = (await service.get(`/api/tools?from=${DAY2}`)).json;
+      assert.deepEqual(day2.byTool, [{ tool: 'Edit', count: 1 }, { tool: 'Read', count: 1 }]);
+      const capped = (await service.get('/api/tools?limit=2')).json;
+      assert.equal(capped.calls.length, 2);
+      assert.equal(capped.byTool.length, 3); // the counts are not capped
+      assert.equal((await service.get('/api/tools?limit=0')).status, 400);
+    }));
+
   test('GET /api/summary on an empty database has empty lists', () =>
     withService(async (service) => {
       assert.deepEqual((await service.get('/api/summary')).json, { byDay: [], byModel: [] });
