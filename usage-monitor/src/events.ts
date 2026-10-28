@@ -1,4 +1,5 @@
 const MAX_EVENTS_PER_BATCH = 500;
+const MAX_DETAIL_LENGTH = 300;
 const MAX_CWD_LENGTH = 4096; // PATH_MAX
 const MAX_MODEL_LENGTH = 100;
 // 9999-12-31T23:59:59.999Z: the last instant SQLite's date() can format, so every stored ts has a day.
@@ -17,7 +18,7 @@ export type UsageEvent = Base & {
   cacheWrite: number;
   costUsd: number | null;
 };
-export type ToolEvent = Base & { type: 'tool'; agent: string; tool: string };
+export type ToolEvent = Base & { type: 'tool'; agent: string; tool: string; detail?: string };
 export type AgentEvent = Base & { type: 'agent'; agent: string; label: string; model?: string };
 export type SessionEvent = Base & { type: 'session'; state: string; cwd?: string };
 export type MonitorEvent = UsageEvent | ToolEvent | AgentEvent | SessionEvent;
@@ -68,7 +69,13 @@ function parseEvent(raw: unknown, index: number): MonitorEvent {
         costUsd: read.costUsd('costUsd'),
       };
     case 'tool':
-      return { ...base, type: 'tool', agent: read.string('agent', 1, 64), tool: read.string('tool', 1, 200) };
+      return {
+        ...base,
+        type: 'tool',
+        agent: read.string('agent', 1, 64),
+        tool: read.string('tool', 1, 200),
+        ...read.optionalString('detail', MAX_DETAIL_LENGTH),
+      };
     case 'agent':
       return {
         ...base,

@@ -65,6 +65,8 @@ export interface ToolCall {
   /** '' when unknown. */
   label: string;
   cwd: string | null;
+  /** The mod's short, redacted summary of the call's input; null when none was sent. */
+  detail: string | null;
 }
 
 export interface Tools {

@@ -24,8 +24,8 @@ const tools = {
     { tool: 'Read', count: 3 },
   ],
   calls: [
-    { ts: T0, tool: 'Bash', session: 'sess-newest', agent: 'main', label: '', cwd: '/home/dev/projects/alpha/api/usage-monitor' },
-    { ts: T0 - 60_000, tool: 'Read', session: 'sess-newest', agent: 'a1', label: 'Explore: find routes', cwd: '/tmp/scratch' },
+    { ts: T0, tool: 'Bash', session: 'sess-newest', agent: 'main', label: '', cwd: '/home/dev/projects/alpha/api/usage-monitor', detail: 'npm test' },
+    { ts: T0 - 60_000, tool: 'Read', session: 'sess-newest', agent: 'a1', label: 'Explore: find routes', cwd: '/tmp/scratch', detail: null },
   ],
 };
 
@@ -138,6 +138,7 @@ describe('Widget', () => {
     const [first, second] = within(calls).getAllByRole('listitem') as [HTMLElement, HTMLElement];
     expect(first).toHaveTextContent('Bash');
     expect(first).toHaveTextContent('main');
+    expect(within(first).getByTitle('npm test')).toHaveTextContent('npm test');
     expect(second).toHaveTextContent('Explore: find routes');
     expect(second).toHaveTextContent('/tmp/scratch');
 

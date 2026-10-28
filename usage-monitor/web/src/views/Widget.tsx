@@ -151,6 +151,11 @@ function ToolCalls({ from, onBack }: { from: number; onBack: () => void }) {
               <li key={`${c.ts}:${i}`} className="flex items-baseline justify-between gap-3 py-1 text-[0.75rem]">
                 <span className="min-w-0">
                   <span className="block truncate font-mono">{c.tool}</span>
+                  {c.detail && (
+                    <span className="block truncate font-mono text-[0.6875rem]" title={c.detail}>
+                      {c.detail}
+                    </span>
+                  )}
                   <span className="block truncate text-[0.6875rem] text-[var(--label-2)]" title={c.cwd ?? undefined}>
                     {c.label || c.agent} · {shortenPath(c.cwd)}
                   </span>

@@ -20,6 +20,8 @@ export function ensureSchema(db: DatabaseSync): void {
   inTransaction(db, () => {
     const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
     if (row.user_version === 0) db.exec(fs.readFileSync(schemaPath, 'utf8'));
+    // Version 2: a short summary of a tool call's input, when the mod sends one.
+    if (row.user_version < 2) db.exec('ALTER TABLE tool_call ADD COLUMN detail TEXT; PRAGMA user_version = 2;');
   });
 }
 

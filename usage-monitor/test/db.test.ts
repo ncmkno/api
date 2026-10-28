@@ -28,10 +28,21 @@ const insertUsage = (db: DatabaseSync, eventId: string, costUsd: number | null =
   db.prepare(`INSERT OR IGNORE INTO usage_event VALUES (?, 's', 'main', 1, 'm', 1, 1, 1, 1, ?)`).run(eventId, costUsd);
 
 describe('schema', () => {
-  test('an empty database gets every table and user_version 1', () => {
+  test('an empty database gets every table and user_version 2', () => {
     const db = openDb(':memory:');
-    assert.equal(userVersion(db), 1);
+    assert.equal(userVersion(db), 2);
     assert.deepEqual(tableNames(db), ['agent', 'session', 'state_event', 'tool_call', 'usage_event']);
+    db.close();
+  });
+
+  test('a version 1 database gains tool_call.detail and keeps its rows', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(fs.readFileSync(schemaPath, 'utf8'));
+    db.exec(`INSERT INTO tool_call (event_id, session, agent, ts, tool) VALUES ('t-1', 's', 'main', 1, 'Bash')`);
+    assert.equal(userVersion(db), 1);
+    ensureSchema(db);
+    assert.equal(userVersion(db), 2);
+    assert.deepEqual({ ...(db.prepare('SELECT tool, detail FROM tool_call').get() as object) }, { tool: 'Bash', detail: null });
     db.close();
   });
 
@@ -40,7 +51,7 @@ describe('schema', () => {
     insertUsage(db, 'e-1');
     ensureSchema(db);
     ensureSchema(db);
-    assert.equal(userVersion(db), 1);
+    assert.equal(userVersion(db), 2);
     assert.equal((db.prepare('SELECT count(*) AS n FROM usage_event').get() as { n: number }).n, 1);
     db.close();
   });
@@ -52,7 +63,7 @@ describe('schema', () => {
     first.close();
 
     const second = openDb(file);
-    assert.equal(userVersion(second), 1);
+    assert.equal(userVersion(second), 2);
     assert.equal((second.prepare('SELECT count(*) AS n FROM usage_event').get() as { n: number }).n, 1);
     second.close();
   });
@@ -96,7 +107,7 @@ describe('schema', () => {
       first.exec('COMMIT');
       const [code] = await exited;
       assert.equal(code, 0, stderr);
-      assert.equal(userVersion(first), 1);
+      assert.equal(userVersion(first), 2);
       assert.deepEqual(tableNames(first), ['agent', 'session', 'state_event', 'tool_call', 'usage_event']);
     } finally {
       second.kill();
@@ -132,7 +143,7 @@ describe('constraints', () => {
     const db = openDb(':memory:');
     assert.equal(insertUsage(db, 'e-1').changes, 1);
     assert.equal(insertUsage(db, 'e-1').changes, 0);
-    const insertTool = db.prepare(`INSERT INTO tool_call VALUES ('t-1', 's', 'main', 1, 'Bash')`);
+    const insertTool = db.prepare(`INSERT INTO tool_call (event_id, session, agent, ts, tool) VALUES ('t-1', 's', 'main', 1, 'Bash')`);
     insertTool.run();
     assert.throws(() => insertTool.run(), /UNIQUE/);
     db.close();

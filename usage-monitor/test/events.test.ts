@@ -191,6 +191,13 @@ describe('session events', () => {
     for (const good of ['start', 'end', 'clear']) assertValid(session({ state: good }));
   });
 
+  test('a tool detail is optional, a string of at most 300 characters when present', () => {
+    for (const bad of [7, null, {}, 'x'.repeat(301)]) assertInvalid([tool({ detail: bad })], 0, 'detail');
+    assertValid(tool({ detail: 'npm test' }));
+    assertValid(tool({ detail: 'x'.repeat(300) }));
+    assert.equal((parseBatch({ events: [tool({ detail: 'ls' })] })[0] as Raw).detail, 'ls');
+  });
+
   test('cwd is optional but must be a string when present', () => {
     for (const bad of [7, null, {}]) assertInvalid([session({ cwd: bad })], 0, 'cwd');
     assertValid(session());

@@ -149,8 +149,8 @@ function createIngest(db: DatabaseSync) {
     INSERT OR IGNORE INTO usage_event (event_id, session, agent, ts, model, input, output, cache_read, cache_write, cost_usd)
     VALUES (:id, :session, :agent, :ts, :model, :input, :output, :cacheRead, :cacheWrite, :costUsd)`);
   const insertTool = db.prepare(`
-    INSERT OR IGNORE INTO tool_call (event_id, session, agent, ts, tool)
-    VALUES (:id, :session, :agent, :ts, :tool)`);
+    INSERT OR IGNORE INTO tool_call (event_id, session, agent, ts, tool, detail)
+    VALUES (:id, :session, :agent, :ts, :tool, :detail)`);
   const insertStateEvent = db.prepare('INSERT OR IGNORE INTO state_event (event_id) VALUES (:id)');
   const upsertSession = db.prepare(`
     INSERT INTO session (id, started_ts, last_ts, cwd) VALUES (:session, :ts, :ts, :cwd)
@@ -178,7 +178,7 @@ function createIngest(db: DatabaseSync) {
       }
       case 'tool': {
         const { type, ...columns } = event;
-        return insertTool.run(columns).changes > 0;
+        return insertTool.run({ ...columns, detail: event.detail ?? null }).changes > 0;
       }
       case 'agent':
         if (insertStateEvent.run({ id: event.id }).changes === 0) return false;
@@ -295,9 +295,10 @@ function createReads(db: DatabaseSync) {
     SELECT tool, count(*) AS count FROM tool_call WHERE ts BETWEEN :from AND :to
     GROUP BY tool ORDER BY count DESC, tool`);
 
-  // Each call with its session's directory and its agent's label; the event store keeps no arguments.
+  // Each call with its session's directory, its agent's label, and the mod's summary of its input (null when none was sent).
   const toolCalls = db.prepare(`
-    SELECT c.ts AS ts, c.tool AS tool, c.session AS session, c.agent AS agent, coalesce(a.label, '') AS label, s.cwd AS cwd
+    SELECT c.ts AS ts, c.tool AS tool, c.session AS session, c.agent AS agent, coalesce(a.label, '') AS label, s.cwd AS cwd,
+           c.detail AS detail
     FROM tool_call c
     LEFT JOIN agent a ON a.session = c.session AND a.agent = c.agent
     LEFT JOIN session s ON s.id = c.session

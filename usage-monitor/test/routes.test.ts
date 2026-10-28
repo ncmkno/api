@@ -89,8 +89,8 @@ const usage = (sessionId: string, agent: string, model: string, ts: number, toke
   id: id(), v: 1, type: 'usage', session: sessionId, ts, agent, model,
   input: tokens[0], output: tokens[1], cacheRead: tokens[2], cacheWrite: tokens[3], costUsd, ...over,
 });
-const tool = (sessionId: string, agent: string, name: string, ts: number): Raw => ({
-  id: id(), v: 1, type: 'tool', session: sessionId, ts, agent, tool: name,
+const tool = (sessionId: string, agent: string, name: string, ts: number, detail?: string): Raw => ({
+  id: id(), v: 1, type: 'tool', session: sessionId, ts, agent, tool: name, ...(detail === undefined ? {} : { detail }),
 });
 const agentEvent = (sessionId: string, agent: string, ts: number, label: string, model?: string): Raw => ({
   id: id(), v: 1, type: 'agent', session: sessionId, ts, agent, label, ...(model === undefined ? {} : { model }),
@@ -478,11 +478,17 @@ describe('read routes', () => {
       ]);
       assert.equal(reply.json.calls.length, 6);
       assert.deepEqual(reply.json.calls[0], {
-        ts: DAY2 + 5 * HOUR, tool: 'Edit', session: 'sess-b', agent: 'main', label: '', cwd: null,
+        ts: DAY2 + 5 * HOUR, tool: 'Edit', session: 'sess-b', agent: 'main', label: '', cwd: null, detail: null,
       });
       assert.deepEqual(reply.json.calls[1], {
-        ts: DAY2 + HOUR, tool: 'Read', session: 'sess-a', agent: 'sub-1', label: 'explore', cwd: '/work/a',
+        ts: DAY2 + HOUR, tool: 'Read', session: 'sess-a', agent: 'sub-1', label: 'explore', cwd: '/work/a', detail: null,
       });
+    }));
+
+  test('GET /api/tools returns the detail a tool event was sent with', () =>
+    withService(async (service) => {
+      await service.post([tool('s', 'main', 'Bash', DAY1, 'npm test')]);
+      assert.equal((await service.get('/api/tools')).json.calls[0].detail, 'npm test');
     }));
 
   test('GET /api/tools bounds by from/to and caps the call list with limit', () =>
