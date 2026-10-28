@@ -176,10 +176,10 @@ export function SessionDetail({ id }: { id: string }) {
                         <HeadLabel short="In" long="New in" />
                       </TableCell>
                       <TableCell align="right">Out</TableCell>
-                      <TableCell align="right" className="hidden md:table-cell">
+                      <TableCell align="right" className="hidden lg:table-cell">
                         Cache read
                       </TableCell>
-                      <TableCell align="right" className="hidden md:table-cell">
+                      <TableCell align="right" className="hidden lg:table-cell">
                         Cache write
                       </TableCell>
                       <TableCell align="right">
@@ -214,10 +214,10 @@ export function SessionDetail({ id }: { id: string }) {
                         <TableCell align="right" title={formatExact(a.output)}>
                           {formatCompact(a.output)}
                         </TableCell>
-                        <TableCell align="right" className="hidden md:table-cell" title={formatExact(a.cacheRead)}>
+                        <TableCell align="right" className="hidden lg:table-cell" title={formatExact(a.cacheRead)}>
                           {formatCompact(a.cacheRead)}
                         </TableCell>
-                        <TableCell align="right" className="hidden md:table-cell" title={formatExact(a.cacheWrite)}>
+                        <TableCell align="right" className="hidden lg:table-cell" title={formatExact(a.cacheWrite)}>
                           {formatCompact(a.cacheWrite)}
                         </TableCell>
                         <TableCell align="right" className="font-medium whitespace-nowrap">

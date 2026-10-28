@@ -82,7 +82,7 @@ export function Sessions() {
                 <TableRow>
                   <TableCell>Last activity</TableCell>
                   <TableCell className="hidden sm:table-cell">Session</TableCell>
-                  <TableCell className="hidden sm:table-cell">Directory</TableCell>
+                  <TableCell className="hidden md:table-cell">Directory</TableCell>
                   <TableCell className="hidden lg:table-cell">Model</TableCell>
                   <TableCell align="right">
                     <HeadLabel short="Req." long="Requests" />
@@ -112,14 +112,14 @@ export function Sessions() {
                       <Link href={hrefs.session(s.session)} color="inherit" underline="hover" className="font-medium">
                         {formatDateTime(s.lastTs)}
                       </Link>
-                      <div className="mt-0.5 text-fg-muted sm:hidden">
+                      <div className="mt-0.5 text-fg-muted md:hidden">
                         <Directory cwd={s.cwd} className="max-w-[5.5rem]" />
                       </div>
                     </TableCell>
                     <TableCell className="hidden whitespace-nowrap text-fg-muted sm:table-cell">
                       <SessionId id={s.session} />
                     </TableCell>
-                    <TableCell className="hidden text-fg-muted sm:table-cell">
+                    <TableCell className="hidden text-fg-muted md:table-cell">
                       <Directory cwd={s.cwd} className="max-w-[14rem]" />
                     </TableCell>
                     <TableCell className="hidden whitespace-nowrap text-fg-muted lg:table-cell">
