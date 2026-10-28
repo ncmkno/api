@@ -49,7 +49,7 @@ function Models({ models }: { models: string[] }) {
   const [top, ...rest] = models;
   return (
     <Tooltip title={models.length > 0 ? models.join(', ') : 'Unknown model'} placement="bottom-start">
-      <span className="block truncate font-mono text-[0.8125rem]">
+      <span className="block max-w-[10rem] truncate font-mono text-[0.8125rem]">
         {top ?? '—'}
         {rest.length > 0 && ` +${rest.length}`}
       </span>
@@ -81,23 +81,23 @@ export function Sessions() {
               <TableHead>
                 <TableRow>
                   <TableCell>Last activity</TableCell>
-                  <TableCell>Session</TableCell>
+                  <TableCell className="hidden sm:table-cell">Session</TableCell>
                   <TableCell className="hidden sm:table-cell">Directory</TableCell>
                   <TableCell className="hidden lg:table-cell">Model</TableCell>
                   <TableCell align="right">
                     <HeadLabel short="Req." long="Requests" />
                   </TableCell>
-                  <TableCell align="right" className="hidden md:table-cell">
+                  <TableCell align="right" className="hidden lg:table-cell">
                     Tools
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" className="hidden sm:table-cell">
                     <HeadLabel short="In" long="New in" />
                   </TableCell>
                   <TableCell align="right">Out</TableCell>
-                  <TableCell align="right" className="hidden md:table-cell">
+                  <TableCell align="right" className="hidden min-[1150px]:table-cell">
                     Cache read
                   </TableCell>
-                  <TableCell align="right" className="hidden md:table-cell">
+                  <TableCell align="right" className="hidden min-[1150px]:table-cell">
                     Cache write
                   </TableCell>
                   <TableCell align="right">
@@ -116,11 +116,11 @@ export function Sessions() {
                         <Directory cwd={s.cwd} className="max-w-[5.5rem]" />
                       </div>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-fg-muted">
+                    <TableCell className="hidden whitespace-nowrap text-fg-muted sm:table-cell">
                       <SessionId id={s.session} />
                     </TableCell>
                     <TableCell className="hidden text-fg-muted sm:table-cell">
-                      <Directory cwd={s.cwd} className="max-w-[20rem]" />
+                      <Directory cwd={s.cwd} className="max-w-[14rem]" />
                     </TableCell>
                     <TableCell className="hidden whitespace-nowrap text-fg-muted lg:table-cell">
                       <Models models={s.models} />
@@ -128,19 +128,19 @@ export function Sessions() {
                     <TableCell align="right" title={formatExact(s.requests)}>
                       {formatCompact(s.requests)}
                     </TableCell>
-                    <TableCell align="right" className="hidden md:table-cell" title={formatExact(s.tools)}>
+                    <TableCell align="right" className="hidden lg:table-cell" title={formatExact(s.tools)}>
                       {formatCompact(s.tools)}
                     </TableCell>
-                    <TableCell align="right" title={formatExact(s.input)}>
+                    <TableCell align="right" className="hidden sm:table-cell" title={formatExact(s.input)}>
                       {formatCompact(s.input)}
                     </TableCell>
                     <TableCell align="right" title={formatExact(s.output)}>
                       {formatCompact(s.output)}
                     </TableCell>
-                    <TableCell align="right" className="hidden md:table-cell" title={formatExact(s.cacheRead)}>
+                    <TableCell align="right" className="hidden min-[1150px]:table-cell" title={formatExact(s.cacheRead)}>
                       {formatCompact(s.cacheRead)}
                     </TableCell>
-                    <TableCell align="right" className="hidden md:table-cell" title={formatExact(s.cacheWrite)}>
+                    <TableCell align="right" className="hidden min-[1150px]:table-cell" title={formatExact(s.cacheWrite)}>
                       {formatCompact(s.cacheWrite)}
                     </TableCell>
                     <TableCell align="right" className="font-medium whitespace-nowrap">
