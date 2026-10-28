@@ -135,5 +135,19 @@ describe('SessionDetail', () => {
     expect(second).toHaveTextContent('ls');
     expect(calledUrls(fetchMock)).toContain('/api/tools?session=sess-newest&limit=200');
   });
+
+  it('shows the agent column of the timeline only when more than one agent made calls, and marks calls with no summary', async () => {
+    const call = (ts: number, agent: string, detail: string | null) => ({
+      ts, tool: 'Bash', detail, session: 'sess-newest', agent, label: '', cwd: '/w',
+    });
+    stubApi((url) =>
+      url.startsWith('/api/tools') ? { body: { byTool: [], calls: [call(2, 'main', 'ls'), call(1, 'main', null)] } } : { body: sessionDetail },
+    );
+    renderWithTheme(<SessionDetail id="sess-newest" />);
+    const timeline = await screen.findByRole('list', { name: 'Timeline' });
+    await waitFor(() => expect(within(timeline).getAllByRole('listitem')).toHaveLength(2));
+    expect(within(timeline).queryByText('main')).not.toBeInTheDocument();
+    expect(within(timeline).getByTitle('Recorded before tool summaries were sent')).toBeInTheDocument();
+  });
 });
 

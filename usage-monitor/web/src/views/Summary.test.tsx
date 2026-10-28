@@ -56,11 +56,11 @@ describe('Summary', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Last 30 days' }));
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     await screen.findByRole('table', { name: 'Usage by model' });
-    expect(calledUrls(fetchMock).at(-1)).toBe(`/api/summary?from=${Date.UTC(2026, 8, 29)}&to=${NOW}`);
+    expect(calledUrls(fetchMock)).toContain(`/api/summary?from=${Date.UTC(2026, 8, 29)}&to=${NOW}`);
 
     fireEvent.click(screen.getByRole('button', { name: 'All' }));
     await screen.findByRole('table', { name: 'Usage by model' });
-    expect(calledUrls(fetchMock).at(-1)).toBe('/api/summary');
+    expect(calledUrls(fetchMock).at(-1)).toBe('/api/summary'); // all time has no previous window
     expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -85,9 +85,37 @@ describe('Summary', () => {
     const days = ['2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26', '2026-10-27', '2026-10-28'];
     expect(charts[0]).toHaveAttribute('data-days', days.join(','));
     expect(charts[0]).toHaveAttribute('data-series', 'Est. cost:0|0|0|0|2.5|0|7.5');
-    expect(charts[1]).toHaveAttribute('data-series', 'New in:0|0|0|0|40000|0|80000;Out:0|0|0|0|120000|0|240000');
+    expect(charts[1]).toHaveAttribute(
+      'data-series',
+      'New in:0|0|0|0|40000|0|80000;Out:0|0|0|0|120000|0|240000;Cache write:0|0|0|0|300000|0|600000;Cache read:0|0|0|0|9000000|0|18000000',
+    );
     expect(screen.getByRole('heading', { name: 'Cost per day' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Tokens per day' })).toBeInTheDocument();
+  });
+
+  it('compares each total with the previous window of the same length', async () => {
+    const { from } = rangeBounds('7d', NOW);
+    const previous = {
+      byDay: [{ day: '2026-10-18', requests: 320, tools: 200, input: 1, output: 1, cacheRead: 0, cacheWrite: 0, costUsd: 4 }],
+      byModel: [],
+    };
+    const fetchMock = stubApi((url) => (url.includes(`to=${from! - 1}`) ? { body: previous } : { body: summary }));
+    renderWithTheme(<Summary />);
+    await waitFor(() => expect(statCard('Est. cost')).toHaveTextContent('+$6.00 vs previous 7 days'));
+    expect(statCard('Requests')).toHaveTextContent('−20 vs previous 7 days');
+    expect(statCard('Tool calls')).toHaveTextContent('+10 vs previous 7 days');
+    expect(calledUrls(fetchMock)).toContain(`/api/summary?from=${from! - 7 * 86_400_000}&to=${from! - 1}`);
+  });
+
+  it('says so when the previous window was empty, and shows a daily average for all time', async () => {
+    const { from } = rangeBounds('7d', NOW);
+    stubApi((url) => (url.includes(`to=${from! - 1}`) ? { body: { byDay: [], byModel: [] } } : { body: summary }));
+    renderWithTheme(<Summary />);
+    await waitFor(() => expect(statCard('Est. cost')).toHaveTextContent('Nothing in previous 7 days'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    // all time spans Oct 26 to Oct 28: 3 days, $10.00 in total
+    await waitFor(() => expect(statCard('Est. cost')).toHaveTextContent('Avg $3.33 a day'));
   });
 
   it('shows a dash, not $0.00, for an est. cost when no day in the range had a price', async () => {
@@ -125,15 +153,17 @@ describe('Summary', () => {
       'Est. cost',
       'New in',
       'Out',
+      'Cache write',
+      'Cache read',
     ]);
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows).toHaveLength(7); // the 7 days of the range, empty ones included
     const cells = (row: HTMLElement) => within(row).getAllByRole('cell').map((c) => c.textContent);
     expect(within(rows[0]!).getByRole('rowheader')).toHaveTextContent('Oct 22');
-    expect(cells(rows[0]!)).toEqual(['$0.00', '0', '0']);
+    expect(cells(rows[0]!)).toEqual(['$0.00', '0', '0', '0', '0']);
     expect(within(rows[4]!).getByRole('rowheader')).toHaveTextContent('Oct 26');
-    expect(cells(rows[4]!)).toEqual(['—', '40,000', '120,000']); // unpriced day
-    expect(cells(rows[6]!)).toEqual(['$7.50', '80,000', '240,000']);
+    expect(cells(rows[4]!)).toEqual(['—', '40,000', '120,000', '300,000', '9,000,000']); // unpriced day
+    expect(cells(rows[6]!)).toEqual(['$7.50', '80,000', '240,000', '600,000', '18,000,000']);
   });
 
   it('lists models by cost with a share of total, unpriced models last', async () => {

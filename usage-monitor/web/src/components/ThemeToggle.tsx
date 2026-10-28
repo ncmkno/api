@@ -15,6 +15,7 @@ export function ThemeToggle() {
   return (
     <IconButton
       size="small"
+      sx={{ '@media (pointer: coarse)': { minWidth: 44, minHeight: 44 } }}
       onClick={() => setMode(isDark ? 'light' : 'dark')}
       aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
     >

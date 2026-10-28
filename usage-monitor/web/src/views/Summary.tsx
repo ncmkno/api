@@ -65,8 +65,9 @@ interface ChartCardProps {
 function ChartCard({ title, note, legend, children }: ChartCardProps) {
   return (
     <Paper className="p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      {/* The legend wraps under the title when both do not fit, instead of squeezing it. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <div className="min-w-[12rem] flex-1">
           <Typography variant="h2" component="h2">
             {title}
           </Typography>
@@ -75,9 +76,9 @@ function ChartCard({ title, note, legend, children }: ChartCardProps) {
           </Typography>
         </div>
         {legend && (
-          <ul className="m-0 flex shrink-0 list-none gap-3 p-0 text-xs whitespace-nowrap text-fg-muted">
+          <ul className="m-0 flex list-none flex-wrap gap-x-3 gap-y-1 p-0 text-xs text-fg-muted">
             {legend.map((item) => (
-              <li key={item.label} className="flex items-center gap-1.5">
+              <li key={item.label} className="flex items-center gap-1.5 whitespace-nowrap">
                 <span aria-hidden className="size-2.5 rounded-xs" style={{ background: item.color }} />
                 {item.label}
               </li>
@@ -111,6 +112,8 @@ function DayTable({ days }: { days: DayUsage[] }) {
             <th scope="col">Est. cost</th>
             <th scope="col">New in</th>
             <th scope="col">Out</th>
+            <th scope="col">Cache write</th>
+            <th scope="col">Cache read</th>
           </tr>
         </thead>
         <tbody>
@@ -120,6 +123,8 @@ function DayTable({ days }: { days: DayUsage[] }) {
               <td>{formatUsd(d.costUsd)}</td>
               <td>{formatExact(d.input)}</td>
               <td>{formatExact(d.output)}</td>
+              <td>{formatExact(d.cacheWrite)}</td>
+              <td>{formatExact(d.cacheRead)}</td>
             </tr>
           ))}
         </tbody>
@@ -133,6 +138,9 @@ function DayCharts({ days }: { days: DayUsage[] }) {
   const palette = theme.vars?.palette ?? theme.palette;
   const accent = palette.accentFill;
   const support = palette.secondary.main;
+  // Cache traffic is the bulk of the tokens but the cheap part: it stays quiet beside new input and output.
+  const cacheWrite = palette.success.main;
+  const cacheRead = palette.text.disabled;
   const axis = [
     {
       scaleType: 'band' as const,
@@ -172,10 +180,12 @@ function DayCharts({ days }: { days: DayUsage[] }) {
       </ChartCard>
       <ChartCard
         title="Tokens per day"
-        note="New input and output tokens; cache traffic is in the model table"
+        note="Every token type; cache reads are billed at a tenth of the new-input price"
         legend={[
           { label: 'New in', color: accent },
           { label: 'Out', color: support },
+          { label: 'Cache write', color: cacheWrite },
+          { label: 'Cache read', color: cacheRead },
         ]}
       >
         <BarChart
@@ -183,6 +193,20 @@ function DayCharts({ days }: { days: DayUsage[] }) {
           series={[
             { data: days.map((d) => d.input), label: 'New in', stack: 'tokens', color: accent, valueFormatter: (v) => formatExact(v) },
             { data: days.map((d) => d.output), label: 'Out', stack: 'tokens', color: support, valueFormatter: (v) => formatExact(v) },
+            {
+              data: days.map((d) => d.cacheWrite),
+              label: 'Cache write',
+              stack: 'tokens',
+              color: cacheWrite,
+              valueFormatter: (v) => formatExact(v),
+            },
+            {
+              data: days.map((d) => d.cacheRead),
+              label: 'Cache read',
+              stack: 'tokens',
+              color: cacheRead,
+              valueFormatter: (v) => formatExact(v),
+            },
           ]}
           yAxis={[{ valueFormatter: (v: number) => formatCompact(v), width: 48 }]}
         />
@@ -268,14 +292,8 @@ function ModelTable({ byModel, totalCost }: { byModel: SummaryData['byModel']; t
   );
 }
 
-export function Summary() {
-  const [range, setRange] = useState<Range>('7d');
-  const { data, error, fetching, loading, retry } = usePolling(`summary:${range}`, (signal) =>
-    fetchSummary(rangeBounds(range, Date.now()), signal),
-  );
-
-  const empty = data !== undefined && data.byDay.length === 0 && data.byModel.length === 0;
-  const totals = data?.byDay.reduce(
+function totalsOf(summary: SummaryData) {
+  return summary.byDay.reduce(
     (t, d) => ({
       cost: d.costUsd === null ? t.cost : (t.cost ?? 0) + d.costUsd,
       requests: t.requests + d.requests,
@@ -285,7 +303,34 @@ export function Summary() {
     }),
     { cost: null as number | null, requests: 0, tools: 0, input: 0, output: 0 },
   );
+}
+
+export function Summary() {
+  const [range, setRange] = useState<Range>('7d');
+  const { data, error, fetching, loading, retry } = usePolling(`summary:${range}`, (signal) =>
+    fetchSummary(rangeBounds(range, Date.now()), signal),
+  );
+
+  const empty = data !== undefined && data.byDay.length === 0 && data.byModel.length === 0;
+  const totals = data && totalsOf(data);
   const rangeLabel = RANGES.find((r) => r.value === range)!.label.toLowerCase();
+
+  // The window of the same length just before this one, for the cards' comparisons.
+  const days = RANGES.find((r) => r.value === range)!.days;
+  const prevData = usePolling(`summary-previous:${range}`, (signal) => {
+    if (days === undefined) return Promise.resolve(null);
+    const { from } = rangeBounds(range, Date.now());
+    return fetchSummary({ from: from! - days * DAY_MS, to: from! - 1 }, signal);
+  }).data;
+  const previous = prevData === undefined ? undefined : prevData === null ? null : totalsOf(prevData);
+  const prevLabel = `previous ${days} days`;
+  const compare = (now: number, before: number, format: (n: number) => string): string | undefined => {
+    if (previous === undefined || days === undefined) return undefined;
+    if (previous === null || (previous.requests === 0 && previous.tools === 0 && previous.cost === null)) return `Nothing in ${prevLabel}`;
+    const delta = now - before;
+    if (delta === 0) return `Same as ${prevLabel}`;
+    return `${delta > 0 ? '+' : '−'}${format(Math.abs(delta))} vs ${prevLabel}`;
+  };
 
   return (
     <section className="flex flex-col gap-6" aria-labelledby="summary-title">
@@ -306,7 +351,7 @@ export function Summary() {
           onChange={(_, next: Range | null) => next && setRange(next)}
         >
           {RANGES.map((r) => (
-            <ToggleButton key={r.value} value={r.value}>
+            <ToggleButton key={r.value} value={r.value} sx={{ '@media (pointer: coarse)': { minHeight: 44 } }}>
               {r.label}
             </ToggleButton>
           ))}
@@ -337,9 +382,30 @@ export function Summary() {
       {data && !empty && totals && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard lead label="Est. cost" value={formatUsd(totals.cost)} hint={rangeLabel} />
-            <StatCard label="Requests" value={formatCompact(totals.requests)} title={formatExact(totals.requests)} />
-            <StatCard label="Tool calls" value={formatCompact(totals.tools)} title={formatExact(totals.tools)} />
+            <StatCard
+              lead
+              label="Est. cost"
+              value={formatUsd(totals.cost)}
+              hint={
+                range === 'all'
+                  ? totals.cost === null
+                    ? undefined
+                    : `Avg ${formatUsd(totals.cost / withEmptyDays(data.byDay, range, Date.now()).length)} a day`
+                  : compare(totals.cost ?? 0, previous?.cost ?? 0, formatUsd)
+              }
+            />
+            <StatCard
+              label="Requests"
+              value={formatCompact(totals.requests)}
+              title={formatExact(totals.requests)}
+              hint={range === 'all' ? undefined : compare(totals.requests, previous?.requests ?? 0, formatExact)}
+            />
+            <StatCard
+              label="Tool calls"
+              value={formatCompact(totals.tools)}
+              title={formatExact(totals.tools)}
+              hint={range === 'all' ? undefined : compare(totals.tools, previous?.tools ?? 0, formatExact)}
+            />
             <StatCard
               label="New tokens"
               value={formatCompact(totals.input + totals.output)}

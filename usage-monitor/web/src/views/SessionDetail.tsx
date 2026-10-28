@@ -39,6 +39,7 @@ function Timeline({ id }: { id: string }) {
   const { data } = usePolling(`session-tools:${id}`, (signal) => fetchTools({ session: id, limit: TIMELINE_LIMIT }, signal));
   const runs = groupRepeats(data?.calls ?? []);
   if (runs.length === 0) return null;
+  const manyAgents = new Set(runs.map((r) => r.call.agent)).size > 1;
 
   return (
     <div className="flex flex-col gap-2">
@@ -50,7 +51,10 @@ function Timeline({ id }: { id: string }) {
           {runs.map(({ call: c, count }, i) => (
             <li
               key={`${c.ts}:${i}`}
-              className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-baseline gap-3 border-b border-line px-4 py-2 last:border-b-0 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,10rem)]"
+              className={`grid grid-cols-[5.5rem_minmax(0,1fr)] items-baseline gap-3 border-b border-line px-4 py-2 last:border-b-0 ${
+                manyAgents ? 'sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,10rem)]' : 'sm:grid-cols-[7rem_minmax(0,1fr)]'
+              } ${c.detail ? '' : 'opacity-60'}`}
+              title={c.detail ? undefined : 'Recorded before tool summaries were sent'}
             >
               <span className="text-xs whitespace-nowrap text-fg-muted tabular-nums">{formatDateTime(c.ts)}</span>
               <span className="min-w-0">
@@ -64,9 +68,11 @@ function Timeline({ id }: { id: string }) {
                   </span>
                 )}
               </span>
-              <span className="hidden truncate text-xs text-fg-muted sm:block" title={c.label || c.agent}>
-                {c.label || c.agent}
-              </span>
+              {manyAgents && (
+                <span className="hidden truncate text-xs text-fg-muted sm:block" title={c.label || c.agent}>
+                  {c.label || c.agent}
+                </span>
+              )}
             </li>
           ))}
         </ul>
