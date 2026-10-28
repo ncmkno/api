@@ -117,8 +117,9 @@ export function fetchSummary(range: { from?: number; to?: number }, signal?: Abo
   return get(`/api/summary${query ? `?${query}` : ''}`, signal);
 }
 
-export function fetchTools(range: { from?: number; limit?: number }, signal?: AbortSignal): Promise<Tools> {
+export function fetchTools(range: { session?: string; from?: number; limit?: number }, signal?: AbortSignal): Promise<Tools> {
   const params = new URLSearchParams();
+  if (range.session !== undefined) params.set('session', range.session);
   if (range.from !== undefined) params.set('from', String(range.from));
   if (range.limit !== undefined) params.set('limit', String(range.limit));
   return get(`/api/tools?${params}`, signal);

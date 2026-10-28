@@ -491,6 +491,15 @@ describe('read routes', () => {
       assert.equal((await service.get('/api/tools')).json.calls[0].detail, 'npm test');
     }));
 
+  test('GET /api/tools?session= keeps one session\'s calls and counts', () =>
+    withService(async (service) => {
+      await service.post(fixtureEvents());
+      const b = (await service.get('/api/tools?session=sess-b')).json;
+      assert.deepEqual(b.byTool, [{ tool: 'Edit', count: 1 }]);
+      assert.deepEqual(b.calls.map((c: Raw) => c.session), ['sess-b']);
+      assert.deepEqual((await service.get('/api/tools?session=nope')).json, { byTool: [], calls: [] });
+    }));
+
   test('GET /api/tools bounds by from/to and caps the call list with limit', () =>
     withService(async (service) => {
       await service.post(fixtureEvents());

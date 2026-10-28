@@ -1,18 +1,40 @@
 import { useEffect } from 'react';
+import { fetchSummary } from './api';
 import AppBar from '@mui/material/AppBar';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import { ThemeToggle } from './components/ThemeToggle';
+import { formatUsd } from './format';
 import { hrefs, useRoute } from './route';
+import { usePolling } from './usePolling';
 import { SessionDetail } from './views/SessionDetail';
 import { Sessions } from './views/Sessions';
 import { Summary } from './views/Summary';
 import { Widget } from './views/Widget';
 
+/** Local midnight, so "today" in the tab title is the user's day. */
+function startOfToday(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** Today's estimated cost in the tab title, readable from any tab. */
+function useCostTitle() {
+  const from = startOfToday();
+  const { data } = usePolling(`title:${from}`, (signal) => fetchSummary({ from }, signal));
+  const priced = (data?.byDay ?? []).filter((d) => d.costUsd !== null);
+  const cost = priced.length > 0 ? priced.reduce((n, d) => n + (d.costUsd ?? 0), 0) : null;
+  useEffect(() => {
+    document.title = data ? `${formatUsd(cost)} today · Usage Monitor` : 'Usage Monitor';
+  }, [data, cost]);
+}
+
 export function App() {
   const route = useRoute();
+  useCostTitle();
   const tab = route.name === 'summary' ? 'summary' : 'sessions'; // a session is under "Sessions"
   const current = (value: typeof tab) => (value === tab ? { 'aria-current': 'page' as const } : {});
   const routeKey = route.name === 'session' ? `session:${route.id}` : route.name;

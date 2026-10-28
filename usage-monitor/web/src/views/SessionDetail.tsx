@@ -10,13 +10,15 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
-import { ApiError, fetchSession, type AgentUsage } from '../api';
+import { ApiError, fetchSession, fetchTools, type AgentUsage } from '../api';
 import { ErrorState } from '../components/ErrorState';
+import { RepeatChip } from '../components/RepeatChip';
 import { HeadLabel } from '../components/HeadLabel';
 import { StatCard } from '../components/StatCard';
 import { TableSkeleton } from '../components/TableSkeleton';
 import { formatCompact, formatDateTime, formatExact, formatUsd, shortenPath } from '../format';
 import { hrefs } from '../route';
+import { groupRepeats } from '../toolRuns';
 import { usePolling } from '../usePolling';
 
 const byCostDesc = (a: AgentUsage, b: AgentUsage) =>
@@ -27,6 +29,49 @@ function BackLink() {
     <Link href={hrefs.sessions} underline="hover" className="inline-flex items-center gap-1 text-sm">
       <span aria-hidden>←</span> All sessions
     </Link>
+  );
+}
+
+const TIMELINE_LIMIT = 200;
+
+/** The session's tool calls newest first, back-to-back repeats folded into one row. */
+function Timeline({ id }: { id: string }) {
+  const { data } = usePolling(`session-tools:${id}`, (signal) => fetchTools({ session: id, limit: TIMELINE_LIMIT }, signal));
+  const runs = groupRepeats(data?.calls ?? []);
+  if (runs.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Typography variant="h2" component="h2">
+        Timeline
+      </Typography>
+      <Paper>
+        <ul aria-label="Timeline" className="m-0 max-h-[28rem] list-none overflow-y-auto p-0">
+          {runs.map(({ call: c, count }, i) => (
+            <li
+              key={`${c.ts}:${i}`}
+              className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-baseline gap-3 border-b border-line px-4 py-2 last:border-b-0 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,10rem)]"
+            >
+              <span className="text-xs whitespace-nowrap text-fg-muted tabular-nums">{formatDateTime(c.ts)}</span>
+              <span className="min-w-0">
+                <span className="flex items-baseline gap-2">
+                  <span className="font-mono text-[0.8125rem]">{c.tool}</span>
+                  <RepeatChip count={count} />
+                </span>
+                {c.detail && (
+                  <span className="block truncate font-mono text-xs text-fg-muted" title={c.detail}>
+                    {c.detail}
+                  </span>
+                )}
+              </span>
+              <span className="hidden truncate text-xs text-fg-muted sm:block" title={c.label || c.agent}>
+                {c.label || c.agent}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Paper>
+    </div>
   );
 }
 
@@ -179,6 +224,8 @@ export function SessionDetail({ id }: { id: string }) {
               </TableContainer>
             </Paper>
           </div>
+
+          <Timeline id={id} />
 
           <div className="flex flex-col gap-2">
             <Typography variant="h2" component="h2">

@@ -154,4 +154,20 @@ describe('Widget', () => {
     fireEvent.doubleClick(await screen.findByRole('region', { name: 'Tool calls' }));
     expect(screen.getByRole('region', { name: 'Tool calls' })).toBeInTheDocument();
   });
+
+  it('folds repeated calls in the tool calls view into one row with a count', async () => {
+    const same = { ts: T0, tool: 'Read', session: 's', agent: 'main', label: '', cwd: '/w', detail: 'config.toml' };
+    stubApi((url) =>
+      url.startsWith('/api/tools')
+        ? { body: { byTool: [{ tool: 'Read', count: 4 }], calls: [same, { ...same, ts: T0 - 1 }, { ...same, ts: T0 - 2 }, { ...same, ts: T0 - 3 }] } }
+        : api(url),
+    );
+    renderWithTheme(<Widget />);
+    fireEvent.doubleClick(await screen.findByRole('region', { name: 'Usage' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Tools today/ }));
+    const calls = await screen.findByRole('list', { name: 'Each call' });
+    await waitFor(() => expect(within(calls).getAllByRole('listitem')).toHaveLength(1));
+    expect(within(calls).getByLabelText('Repeated 4 times')).toHaveTextContent('×4');
+  });
 });
+

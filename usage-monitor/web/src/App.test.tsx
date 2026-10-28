@@ -1,6 +1,7 @@
 import { act, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { formatUsd } from './format';
 import { renderWithTheme, stubApi } from './test/utils';
 import { sessionDetail, sessions, summary } from './test/fixtures';
 
@@ -81,4 +82,12 @@ describe('App', () => {
     unmount();
     expect(errors).not.toHaveBeenCalled();
   });
+
+  it("puts today's estimated cost in the tab title", async () => {
+    stubApi(answer);
+    renderWithTheme(<App />);
+    const cost = summary.byDay.reduce((n, d) => n + (d.costUsd ?? 0), 0);
+    await waitFor(() => expect(document.title).toBe(`${formatUsd(cost)} today · Usage Monitor`));
+  });
 });
+

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '../api';
 import { fetchSessions, fetchSummary, fetchTools } from '../api';
+import { RepeatChip } from '../components/RepeatChip';
 import { resizeWindow } from '../desktopWindow';
 import { formatCompact, formatDateTime, formatExact, formatUsd, shortenPath } from '../format';
+import { groupRepeats } from '../toolRuns';
 import { usePolling } from '../usePolling';
 
 /** Window sizes in logical pixels; COLLAPSED_SIZE matches the window the desktop app opens. */
@@ -147,10 +149,13 @@ function ToolCalls({ from, onBack }: { from: number; onBack: () => void }) {
         <div className="flex flex-col gap-1">
           <SectionTitle>{data && data.calls.length < total ? `Latest ${data.calls.length} calls` : 'Each call'}</SectionTitle>
           <ul aria-label="Each call" className="divide-y divide-[var(--separator)]">
-            {(data?.calls ?? []).map((c, i) => (
+            {groupRepeats(data?.calls ?? []).map(({ call: c, count }, i) => (
               <li key={`${c.ts}:${i}`} className="flex items-baseline justify-between gap-3 py-1 text-[0.75rem]">
                 <span className="min-w-0">
-                  <span className="block truncate font-mono">{c.tool}</span>
+                  <span className="flex items-baseline gap-1.5">
+                    <span className="truncate font-mono">{c.tool}</span>
+                    <RepeatChip count={count} />
+                  </span>
                   {c.detail && (
                     <span className="block truncate font-mono text-[0.6875rem]" title={c.detail}>
                       {c.detail}

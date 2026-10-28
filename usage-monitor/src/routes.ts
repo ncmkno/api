@@ -106,7 +106,12 @@ export function createHandler(db: DatabaseSync, options: HandlerOptions = {}) {
           sendJson(
             res,
             200,
-            reads.tools(timeParam(url, 'from', Number.MIN_SAFE_INTEGER), timeParam(url, 'to', Number.MAX_SAFE_INTEGER), toolLimit(url)),
+            reads.tools(
+              timeParam(url, 'from', Number.MIN_SAFE_INTEGER),
+              timeParam(url, 'to', Number.MAX_SAFE_INTEGER),
+              toolLimit(url),
+              url.searchParams.get('session'),
+            ),
           ),
       },
     },
@@ -292,7 +297,7 @@ function createReads(db: DatabaseSync) {
     GROUP BY model ORDER BY costUsd DESC, sum(input + output + cache_read + cache_write) DESC, model`);
 
   const toolCounts = db.prepare(`
-    SELECT tool, count(*) AS count FROM tool_call WHERE ts BETWEEN :from AND :to
+    SELECT tool, count(*) AS count FROM tool_call WHERE ts BETWEEN :from AND :to AND (:session IS NULL OR session = :session)
     GROUP BY tool ORDER BY count DESC, tool`);
 
   // Each call with its session's directory, its agent's label, and the mod's summary of its input (null when none was sent).
@@ -302,14 +307,14 @@ function createReads(db: DatabaseSync) {
     FROM tool_call c
     LEFT JOIN agent a ON a.session = c.session AND a.agent = c.agent
     LEFT JOIN session s ON s.id = c.session
-    WHERE c.ts BETWEEN :from AND :to
+    WHERE c.ts BETWEEN :from AND :to AND (:session IS NULL OR c.session = :session)
     ORDER BY c.ts DESC, c.rowid DESC
     LIMIT :limit`);
 
   return {
-    tools: (from: number, to: number, limit: number) => ({
-      byTool: toolCounts.all({ from, to }),
-      calls: toolCalls.all({ from, to, limit }),
+    tools: (from: number, to: number, limit: number, session: string | null) => ({
+      byTool: toolCounts.all({ from, to, session }),
+      calls: toolCalls.all({ from, to, limit, session }),
     }),
     sessions: (limit: number) =>
       listSessions.all({ limit }).map((row) => ({ ...row, models: JSON.parse(row.models as string) as string[] })),
