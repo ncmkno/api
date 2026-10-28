@@ -56,7 +56,7 @@ export function App() {
         elevation={0}
         sx={{ bgcolor: 'background.default', borderBottom: 1, borderColor: 'divider', boxShadow: 'none' }}
       >
-        <Toolbar className="mx-auto w-full max-w-6xl gap-2 px-3 sm:gap-4 sm:px-6" disableGutters variant="dense">
+        <Toolbar className="mx-auto w-full max-w-[96rem] gap-2 px-3 sm:gap-4 sm:px-6" disableGutters variant="dense">
           {/* Below 380 px the tabs and the theme toggle need the room; the name stays for screen readers. */}
           <Typography
             component="span"
@@ -74,7 +74,7 @@ export function App() {
           <ThemeToggle />
         </Toolbar>
       </AppBar>
-      <main className="mx-auto w-full max-w-6xl px-3 py-6 sm:px-6 sm:py-8">
+      <main className="mx-auto w-full max-w-[96rem] px-3 py-6 sm:px-6 sm:py-8">
         {route.name === 'sessions' && <Sessions />}
         {route.name === 'session' && <SessionDetail key={route.id} id={route.id} />}
         {route.name === 'summary' && <Summary />}
