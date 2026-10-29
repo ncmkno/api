@@ -114,6 +114,7 @@ const chartSx = {
 
 /** The charts' values as text, for screen readers; the charts themselves only show them on hover. */
 function DayTable({ days }: { days: DayUsage[] }) {
+  const today = dayIn(Date.now(), tzOffset(Date.now()));
   return (
     <div className="sr-only">
       <table>
@@ -131,7 +132,10 @@ function DayTable({ days }: { days: DayUsage[] }) {
         <tbody>
           {days.map((d) => (
             <tr key={d.day}>
-              <th scope="row">{formatDay(d.day)}</th>
+              <th scope="row">
+                {formatDay(d.day)}
+                {d.day === today && ' (today)'}
+              </th>
               <td>{formatUsd(d.costUsd)}</td>
               <td>{formatExact(d.input)}</td>
               <td>{formatExact(d.output)}</td>
@@ -153,11 +157,12 @@ function DayCharts({ days, budget }: { days: DayUsage[]; budget: number | null }
   // Cache traffic is the bulk of the tokens but the cheap part: it stays quiet beside new input and output.
   const cacheWrite = palette.success.main;
   const cacheRead = palette.text.disabled;
+  const today = dayIn(Date.now(), tzOffset(Date.now()));
   const axis = [
     {
       scaleType: 'band' as const,
       data: days.map((d) => d.day),
-      valueFormatter: (day: string) => formatDay(day),
+      valueFormatter: (day: string) => (day === today ? 'Today' : formatDay(day)),
       tickLabelStyle: { fontSize: 11 },
       // Labels that would collide at the chart's actual width are skipped, for 7 days on a phone as for 30 on a desktop.
       tickLabelInterval: 'auto' as const,

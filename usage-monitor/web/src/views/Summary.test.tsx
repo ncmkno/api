@@ -6,10 +6,11 @@ import { rangeBounds, Summary } from './Summary';
 
 // Charts need real layout (ResizeObserver, sizes); here they only report what they were given.
 vi.mock('@mui/x-charts/BarChart', () => ({
-  BarChart: (props: { series: { label: string; data: number[] }[]; xAxis: { data: string[] }[] }) => (
+  BarChart: (props: { series: { label: string; data: number[] }[]; xAxis: { data: string[]; valueFormatter: (day: string) => string }[] }) => (
     <div
       data-testid="bar-chart"
       data-days={props.xAxis[0]!.data.join(',')}
+      data-ticks={props.xAxis[0]!.data.map((d) => props.xAxis[0]!.valueFormatter(d)).join(',')}
       data-series={props.series.map((s) => `${s.label}:${s.data.join('|')}`).join(';')}
     />
   ),
@@ -168,6 +169,10 @@ describe('Summary', () => {
     expect(within(rows[0]!).getByRole('rowheader')).toHaveTextContent('Oct 22');
     expect(cells(rows[0]!)).toEqual(['$0.00', '0', '0', '0', '0']);
     expect(within(rows[4]!).getByRole('rowheader')).toHaveTextContent('Oct 26');
+    expect(within(rows[6]!).getByRole('rowheader')).toHaveTextContent('Oct 28 (today)');
+    for (const chart of screen.getAllByTestId('bar-chart')) {
+      expect(chart.dataset.ticks!.split(',').slice(-2)).toEqual(['Oct 27', 'Today']);
+    }
     expect(cells(rows[4]!)).toEqual(['—', '40,000', '120,000', '300,000', '9,000,000']); // unpriced day
     expect(cells(rows[6]!)).toEqual(['$7.50', '80,000', '240,000', '600,000', '18,000,000']);
   });
