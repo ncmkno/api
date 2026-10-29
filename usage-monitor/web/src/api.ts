@@ -43,7 +43,7 @@ export interface SessionDetail extends Omit<Session, 'tools' | 'models'> {
 }
 
 export interface DayUsage extends Totals {
-  /** UTC YYYY-MM-DD. */
+  /** YYYY-MM-DD in the requested `tz`. */
   day: string;
 }
 
@@ -114,10 +114,11 @@ export function fetchSession(id: string, signal?: AbortSignal): Promise<SessionD
   return get(`/api/sessions/${encodeURIComponent(id)}`, signal);
 }
 
-export function fetchSummary(range: { from?: number; to?: number }, signal?: AbortSignal): Promise<Summary> {
+export function fetchSummary(range: { from?: number; to?: number; tz?: number }, signal?: AbortSignal): Promise<Summary> {
   const params = new URLSearchParams();
   if (range.from !== undefined) params.set('from', String(range.from));
   if (range.to !== undefined) params.set('to', String(range.to));
+  if (range.tz !== undefined) params.set('tz', String(range.tz));
   const query = params.toString();
   return get(`/api/summary${query ? `?${query}` : ''}`, signal);
 }

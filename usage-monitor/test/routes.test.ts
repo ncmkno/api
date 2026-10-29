@@ -467,6 +467,18 @@ describe('read routes', () => {
       });
     }));
 
+  test('GET /api/summary buckets days in the tz offset, in minutes east of UTC', () =>
+    withService(async (service) => {
+      await service.post(fixtureEvents());
+      // UTC-12: 01-01 11:00 falls on 12-31; 12:00 and the 01-02 requests fall on 01-01
+      const west = (await service.get('/api/summary?tz=-720')).json;
+      assert.deepEqual(west.byDay.map((row: Raw) => [row.day, row.requests]).slice(0, 2), [['2025-12-31', 1], ['2026-01-01', 3]]);
+      for (const bad of ['1.5', 'x', '841', '-841']) {
+        const reply = await service.get(`/api/summary?tz=${bad}`);
+        assert.equal(reply.status, 400, bad);
+      }
+    }));
+
   test('GET /api/tools counts calls per tool and lists each call newest first, with its session and agent', () =>
     withService(async (service) => {
       await service.post(fixtureEvents());

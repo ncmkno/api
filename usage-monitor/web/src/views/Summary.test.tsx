@@ -27,10 +27,16 @@ afterEach(() => {
 const statCard = (label: string) => screen.getByText(label, { selector: '.MuiTypography-overline' }).parentElement!;
 
 describe('rangeBounds', () => {
-  it('maps 7 and 30 days to the start of a UTC day up to now, and "all" to nothing', () => {
+  it('maps 7 and 30 days to the start of a local day up to now, and "all" to nothing', () => {
     expect(rangeBounds('7d', NOW)).toEqual({ from: Date.UTC(2026, 9, 22), to: NOW });
     expect(rangeBounds('30d', NOW)).toEqual({ from: Date.UTC(2026, 8, 29), to: NOW });
     expect(rangeBounds('all', NOW)).toEqual({});
+  });
+
+  it('starts at local midnight in the given offset, in minutes east of UTC', () => {
+    // 17:44 UTC is 01:44 on Oct 29 at UTC+8, so 7 days start at Oct 23 00:00 there
+    expect(rangeBounds('7d', NOW, 480)).toEqual({ from: Date.UTC(2026, 9, 22, 16), to: NOW });
+    expect(rangeBounds('7d', NOW, -300)).toEqual({ from: Date.UTC(2026, 9, 22, 5), to: NOW });
   });
 });
 
@@ -45,7 +51,7 @@ describe('Summary', () => {
     expect(within(group).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'false');
 
     await screen.findByRole('table', { name: 'Usage by model' });
-    expect(calledUrls(fetchMock)[0]).toBe(`/api/summary?from=${Date.UTC(2026, 9, 22)}&to=${NOW}`);
+    expect(calledUrls(fetchMock)[0]).toBe(`/api/summary?from=${Date.UTC(2026, 9, 22)}&to=${NOW}&tz=0`);
   });
 
   it('switches range: 30 days and all map to from/to, with skeletons rather than stale data', async () => {
@@ -56,11 +62,11 @@ describe('Summary', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Last 30 days' }));
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     await screen.findByRole('table', { name: 'Usage by model' });
-    expect(calledUrls(fetchMock)).toContain(`/api/summary?from=${Date.UTC(2026, 8, 29)}&to=${NOW}`);
+    expect(calledUrls(fetchMock)).toContain(`/api/summary?from=${Date.UTC(2026, 8, 29)}&to=${NOW}&tz=0`);
 
     fireEvent.click(screen.getByRole('button', { name: 'All' }));
     await screen.findByRole('table', { name: 'Usage by model' });
-    expect(calledUrls(fetchMock).at(-1)).toBe('/api/summary'); // all time has no previous window
+    expect(calledUrls(fetchMock).at(-1)).toBe('/api/summary?tz=0'); // all time has no previous window
     expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -104,7 +110,7 @@ describe('Summary', () => {
     await waitFor(() => expect(statCard('Est. cost')).toHaveTextContent('+$6.00 vs previous 7 days'));
     expect(statCard('Requests')).toHaveTextContent('−20 vs previous 7 days');
     expect(statCard('Tool calls')).toHaveTextContent('+10 vs previous 7 days');
-    expect(calledUrls(fetchMock)).toContain(`/api/summary?from=${from! - 7 * 86_400_000}&to=${from! - 1}`);
+    expect(calledUrls(fetchMock)).toContain(`/api/summary?from=${from! - 7 * 86_400_000}&to=${from! - 1}&tz=0`);
   });
 
   it('says so when the previous window was empty, and shows a daily average for all time', async () => {
@@ -145,9 +151,9 @@ describe('Summary', () => {
     await screen.findAllByTestId('bar-chart');
 
     for (const title of ['Cost per day', 'Tokens per day']) {
-      expect(screen.getByRole('img', { name: new RegExp(`^${title}, bar chart.*Usage per UTC day`) })).toBeInTheDocument();
+      expect(screen.getByRole('img', { name: new RegExp(`^${title}, bar chart.*Usage per day`) })).toBeInTheDocument();
     }
-    const table = screen.getByRole('table', { name: 'Usage per UTC day' });
+    const table = screen.getByRole('table', { name: 'Usage per day' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
       'Day',
       'Est. cost',
@@ -222,7 +228,7 @@ describe('Summary', () => {
   it('draws the daily budget on the cost chart and says so in its note', async () => {
     stubApi((url) => (url === '/api/settings' ? { body: { dailyBudgetUsd: 20 } } : { body: summary }));
     renderWithTheme(<Summary />);
-    await waitFor(() => expect(screen.getByText('Estimated (est.), USD, UTC days; dashed line: $20.00 daily budget')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Estimated (est.), USD, local days; dashed line: $20.00 daily budget')).toBeInTheDocument());
   });
 });
 

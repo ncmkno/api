@@ -32,11 +32,21 @@ const RANGES: { value: Range; label: string; days?: number }[] = [
 
 const DAY_MS = 86_400_000;
 
-/** From the start of the UTC day `days - 1` days ago (so "7 days" is today plus six) up to now. */
-export function rangeBounds(range: Range, now: number): { from?: number; to?: number } {
+/** Minutes east of UTC on this machine at `ms`; the summary's days are local days. */
+export function tzOffset(ms: number): number {
+  return -new Date(ms).getTimezoneOffset();
+}
+
+/** The `YYYY-MM-DD` of `ms` in a zone `tz` minutes east of UTC. */
+function dayIn(ms: number, tz: number): string {
+  return utcDay(ms + tz * 60_000);
+}
+
+/** From local midnight `days - 1` days ago (so "7 days" is today plus six) up to now. */
+export function rangeBounds(range: Range, now: number, tz = tzOffset(now)): { from?: number; to?: number } {
   const days = RANGES.find((r) => r.value === range)?.days;
   if (days === undefined) return {};
-  return { from: Date.parse(`${utcDay(now - (days - 1) * DAY_MS)}T00:00:00Z`), to: now };
+  return { from: Date.parse(`${dayIn(now - (days - 1) * DAY_MS, tz)}T00:00:00Z`) - tz * 60_000, to: now };
 }
 
 /** One row per day across the span, zeros where nothing was recorded, so the time axis is honest. */
@@ -44,8 +54,9 @@ function withEmptyDays(byDay: DayUsage[], range: Range, now: number): DayUsage[]
   if (byDay.length === 0) return [];
   const sorted = [...byDay].sort((a, b) => a.day.localeCompare(b.day));
   const { from } = rangeBounds(range, now);
-  const first = from === undefined ? sorted[0]!.day : utcDay(from);
-  const last = range === 'all' ? sorted[sorted.length - 1]!.day : utcDay(now);
+  const tz = tzOffset(now);
+  const first = from === undefined ? sorted[0]!.day : dayIn(from, tz);
+  const last = range === 'all' ? sorted[sorted.length - 1]!.day : dayIn(now, tz);
   const known = new Map(sorted.map((d) => [d.day, d]));
   return eachDay(first, last).map(
     (day) =>
@@ -53,7 +64,7 @@ function withEmptyDays(byDay: DayUsage[], range: Range, now: number): DayUsage[]
   );
 }
 
-const DAY_TABLE_CAPTION = 'Usage per UTC day';
+const DAY_TABLE_CAPTION = 'Usage per day';
 
 interface ChartCardProps {
   title: string;
@@ -167,7 +178,7 @@ function DayCharts({ days, budget }: { days: DayUsage[]; budget: number | null }
     <div className="relative grid grid-cols-1 gap-3 lg:grid-cols-2">
       <ChartCard
         title="Cost per day"
-        note={`Estimated (est.), USD, UTC days${budget === null ? '' : `; dashed line: ${formatUsd(budget)} daily budget`}`}
+        note={`Estimated (est.), USD, local days${budget === null ? '' : `; dashed line: ${formatUsd(budget)} daily budget`}`}
       >
         <BarChart
           {...common}
@@ -323,7 +334,7 @@ function totalsOf(summary: SummaryData) {
 export function Summary() {
   const [range, setRange] = useState<Range>('7d');
   const { data, error, fetching, loading, retry } = usePolling(`summary:${range}`, (signal) =>
-    fetchSummary(rangeBounds(range, Date.now()), signal),
+    fetchSummary({ ...rangeBounds(range, Date.now()), tz: tzOffset(Date.now()) }, signal),
   );
 
   const empty = data !== undefined && data.byDay.length === 0 && data.byModel.length === 0;
@@ -337,7 +348,7 @@ export function Summary() {
   const prevData = usePolling(`summary-previous:${range}`, (signal) => {
     if (days === undefined) return Promise.resolve(null);
     const { from } = rangeBounds(range, Date.now());
-    return fetchSummary({ from: from! - days * DAY_MS, to: from! - 1 }, signal);
+    return fetchSummary({ from: from! - days * DAY_MS, to: from! - 1, tz: tzOffset(Date.now()) }, signal);
   }).data;
   const previous = prevData === undefined ? undefined : prevData === null ? null : totalsOf(prevData);
   const prevLabel = `previous ${days} days`;
@@ -357,7 +368,7 @@ export function Summary() {
             Summary
           </Typography>
           <Typography color="textSecondary" className="mt-1">
-            Usage per UTC day and per model. Costs are estimates (est.).
+            Usage per day and per model. Costs are estimates (est.).
           </Typography>
         </div>
         <ToggleButtonGroup

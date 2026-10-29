@@ -98,7 +98,7 @@ export function createHandler(db: DatabaseSync, options: HandlerOptions = {}) {
       pattern: /^\/api\/summary$/,
       handlers: {
         GET: ({ res, url }) =>
-          sendJson(res, 200, reads.summary(timeParam(url, 'from', Number.MIN_SAFE_INTEGER), timeParam(url, 'to', Number.MAX_SAFE_INTEGER))),
+          sendJson(res, 200, reads.summary(timeParam(url, 'from', Number.MIN_SAFE_INTEGER), timeParam(url, 'to', Number.MAX_SAFE_INTEGER), tzParam(url))),
       },
     },
     {
@@ -285,10 +285,10 @@ function createReads(db: DatabaseSync) {
     SELECT day, sum(requests) AS requests, sum(tools) AS tools, sum(input) AS input, sum(output) AS output,
            sum(cache_read) AS cacheRead, sum(cache_write) AS cacheWrite, sum(cost_usd) AS costUsd
     FROM (
-      SELECT date(ts / 1000, 'unixepoch') AS day, 1 AS requests, 0 AS tools, input, output, cache_read, cache_write, cost_usd
+      SELECT date(ts / 1000 + :tz * 60, 'unixepoch') AS day, 1 AS requests, 0 AS tools, input, output, cache_read, cache_write, cost_usd
       FROM usage_event WHERE ts BETWEEN :from AND :to
       UNION ALL
-      SELECT date(ts / 1000, 'unixepoch'), 0, 1, 0, 0, 0, 0, NULL
+      SELECT date(ts / 1000 + :tz * 60, 'unixepoch'), 0, 1, 0, 0, 0, 0, NULL
       FROM tool_call WHERE ts BETWEEN :from AND :to
     )
     GROUP BY day ORDER BY day`);
@@ -328,7 +328,7 @@ function createReads(db: DatabaseSync) {
       const { tools: _toolTotal, ...totals } = row;
       return { ...totals, agents: listAgents.all({ session }), tools: listTools.all({ session }) };
     },
-    summary: (from: number, to: number) => ({ byDay: byDay.all({ from, to }), byModel: byModel.all({ from, to }) }),
+    summary: (from: number, to: number, tz = 0) => ({ byDay: byDay.all({ from, to, tz }), byModel: byModel.all({ from, to }) }),
   };
 }
 
@@ -357,6 +357,15 @@ function timeParam(url: URL, name: 'from' | 'to', fallback: number): number {
   if (raw === null) return fallback;
   if (!/^\d{1,15}$/.test(raw)) throw new HttpError(400, `${name} must be an integer, in ms since epoch`);
   return Number(raw);
+}
+
+/** Minutes east of UTC that summary days are bucketed in; UTC by default. */
+function tzParam(url: URL): number {
+  const raw = url.searchParams.get('tz');
+  if (raw === null) return 0;
+  const tz = /^-?\d{1,3}$/.test(raw) ? Number(raw) : NaN;
+  if (!(tz >= -840 && tz <= 840)) throw new HttpError(400, 'tz must be an integer from -840 to 840, in minutes east of UTC');
+  return tz;
 }
 
 // Only an origin-form target (starting with a single "/") is accepted, so "//host/x" cannot swap the host.

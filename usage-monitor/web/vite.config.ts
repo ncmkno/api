@@ -19,6 +19,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // Days follow the local time zone; pin it so the tests mean the same everywhere.
+    env: { TZ: 'UTC' },
     // Node 25 warns about --localstorage-file whenever jsdom's globals touch its own localStorage.
     execArgv: ['--no-experimental-webstorage'],
   },
