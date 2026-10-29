@@ -6,7 +6,7 @@ import path from 'node:path';
 import { describe, test } from 'node:test';
 import type { DatabaseSync } from 'node:sqlite';
 import { openDb } from '../src/db.ts';
-import { createHandler, SESSION_DETAIL_SQL, SESSION_LIST_SQL } from '../src/routes.ts';
+import { createHandler, SESSION_DETAIL_SQL, SESSION_LIST_SQL, type HandlerOptions } from '../src/routes.ts';
 
 const HOUR = 3_600_000;
 const DAY1 = Date.UTC(2026, 0, 1);
@@ -27,12 +27,12 @@ type Service = {
 
 // ---- Harness: a real server on a Unix socket in a temp dir, an in-memory database ----------------
 
-async function withService(run: (service: Service) => Promise<void>): Promise<void> {
+async function withService(run: (service: Service) => Promise<void>, options: HandlerOptions = {}): Promise<void> {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-monitor-http-'));
   const socket = path.join(scratch, 's.sock');
   const distDir = path.join(scratch, 'dist'); // created by the tests that need a built dashboard
   const db = openDb(':memory:');
-  const server = http.createServer(createHandler(db, { distDir }));
+  const server = http.createServer(createHandler(db, { distDir, ...options }));
   const agent = new http.Agent({ keepAlive: true });
   await new Promise<void>((resolve) => server.listen(socket, resolve));
 
@@ -510,6 +510,15 @@ describe('read routes', () => {
       assert.equal(capped.byTool.length, 3); // the counts are not capped
       assert.equal((await service.get('/api/tools?limit=0')).status, 400);
     }));
+
+  test('GET /api/settings reports the daily budget, or null when none is set', async () => {
+    await withService(async (service) => {
+      assert.deepEqual((await service.get('/api/settings')).json, { dailyBudgetUsd: 20 });
+    }, { dailyBudgetUsd: 20 });
+    await withService(async (service) => {
+      assert.deepEqual((await service.get('/api/settings')).json, { dailyBudgetUsd: null });
+    }, { dailyBudgetUsd: null });
+  });
 
   test('GET /api/summary on an empty database has empty lists', () =>
     withService(async (service) => {

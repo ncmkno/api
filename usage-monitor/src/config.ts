@@ -45,6 +45,17 @@ export function tcpPort(env: NodeJS.ProcessEnv = process.env): number | null {
   return port;
 }
 
+// Unset or empty: no budget. A positive amount in USD, e.g. 20 or 7.50.
+export function dailyBudget(env: NodeJS.ProcessEnv = process.env): number | null {
+  const raw = env.USAGE_MONITOR_DAILY_BUDGET;
+  if (!raw) return null;
+  const amount = /^\d+(\.\d{1,2})?$/.test(raw) ? Number(raw) : NaN;
+  if (!(amount > 0)) {
+    throw new ConfigError(`USAGE_MONITOR_DAILY_BUDGET must be a positive amount in USD such as 20 or 7.50, got ${JSON.stringify(raw)}`);
+  }
+  return amount;
+}
+
 export function dbPath(env: NodeJS.ProcessEnv = process.env): string {
   return env.USAGE_MONITOR_DB || path.join(projectDir, 'data', 'usage.db');
 }

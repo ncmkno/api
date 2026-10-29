@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '../api';
-import { fetchSessions, fetchSummary, fetchTools } from '../api';
+import { fetchSessions, fetchSettings, fetchSummary, fetchTools } from '../api';
 import { RepeatChip } from '../components/RepeatChip';
 import { resizeWindow } from '../desktopWindow';
 import { formatCompact, formatDateTime, formatExact, formatUsd, shortenPath } from '../format';
@@ -8,7 +8,7 @@ import { groupRepeats } from '../toolRuns';
 import { usePolling } from '../usePolling';
 
 /** Window sizes in logical pixels; COLLAPSED_SIZE matches the window the desktop app opens. */
-export const COLLAPSED_SIZE = [300, 124] as const;
+export const COLLAPSED_SIZE = [300, 136] as const;
 export const EXPANDED_SIZE = [340, 460] as const;
 const RECENT = 5;
 /** How often the widget checks whether the server has a newer build of this page. */
@@ -199,11 +199,38 @@ function useReloadOnNewBuild() {
   }, []);
 }
 
+const SETTINGS_POLL_MS = 60_000;
+const BUDGET_COLOR = { ok: '#0a84ff', near: '#ff9f0a', over: '#ff453a' } as const;
+
+/** Today's cost against the daily budget: blue, orange from 80%, red past 100%. */
+function BudgetLine({ cost, budget }: { cost: number; budget: number }) {
+  const ratio = cost / budget;
+  const level = ratio > 1 ? 'over' : ratio >= 0.8 ? 'near' : 'ok';
+  return (
+    <div
+      role="meter"
+      aria-label="Daily budget"
+      aria-valuemin={0}
+      aria-valuemax={budget}
+      aria-valuenow={Math.round(cost * 100) / 100}
+      aria-valuetext={`${formatUsd(cost)} of ${formatUsd(budget)}${level === 'over' ? ', over budget' : ''}`}
+      title={`${formatUsd(cost)} of the ${formatUsd(budget)} daily budget`}
+      data-level={level}
+      data-tauri-drag-region
+      className="h-[3px] overflow-hidden rounded-full bg-[var(--separator)]"
+    >
+      <div className="h-full rounded-full" style={{ width: `${Math.min(ratio, 1) * 100}%`, background: BUDGET_COLOR[level] }} />
+    </div>
+  );
+}
+
 export function Widget() {
   const from = startOfToday();
   const summary = usePolling(`widget-summary:${from}`, (signal) => fetchSummary({ from }, signal));
   const recent = usePolling('widget-recent', (signal) => fetchSessions(RECENT, signal));
   const before = usePolling(`widget-yesterday:${from}`, (signal) => fetchSummary({ from: from - DAY_MS, to: from - 1 }, signal));
+  const settings = usePolling('widget-settings', (signal) => fetchSettings(signal), SETTINGS_POLL_MS);
+  const budget = settings.data?.dailyBudgetUsd ?? null;
   useReloadOnNewBuild();
   const [view, setView] = useState<View>('compact');
   const expanded = view !== 'compact';
@@ -240,7 +267,9 @@ export function Widget() {
       aria-label={expanded ? 'Usage details' : 'Usage'}
       data-tauri-drag-region
       onDoubleClick={() => toggle(!expanded)}
-      className="glass-widget flex h-screen cursor-default flex-col gap-3 px-4 py-3 select-none"
+      className={`glass-widget flex h-screen cursor-default flex-col px-4 py-3 select-none ${
+        expanded ? 'gap-3' : 'gap-2 overflow-hidden'
+      }`}
     >
       <div data-tauri-drag-region className="flex items-center justify-between">
         <span data-tauri-drag-region className="text-[0.6875rem] font-semibold tracking-wide text-[var(--label-2)] uppercase">
@@ -275,12 +304,15 @@ export function Widget() {
         <Stat label="Tokens today" value={formatCompact(tokens)} title={formatExact(tokens)} />
         <Stat label="Requests today" value={formatCompact(requests)} title={formatExact(requests)} />
       </div>
+      {budget !== null && <BudgetLine cost={cost ?? 0} budget={budget} />}
 
       {!expanded && session && (
         <div
           aria-label="Latest session"
           data-tauri-drag-region
-          className="mt-auto flex justify-between gap-3 border-t border-[var(--separator)] pt-2 text-[0.75rem] text-[var(--label-2)]"
+          className={`mt-auto flex justify-between gap-3 text-[0.75rem] text-[var(--label-2)] ${
+            budget === null ? 'border-t border-[var(--separator)] pt-2' : ''
+          }`}
         >
           <span data-tauri-drag-region className="truncate">
             {session.models[0] ?? '—'}

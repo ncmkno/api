@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
-import { distDir as defaultDistDir } from './config.ts';
+import { dailyBudget, distDir as defaultDistDir } from './config.ts';
 import { inTransaction } from './db.ts';
 import { parseBatch, ValidationError, type MonitorEvent } from './events.ts';
 
@@ -46,7 +46,8 @@ const STATIC_PATH = /^(?:\/[A-Za-z0-9_][A-Za-z0-9._-]*)+$/;
 const INGEST_PATH = /^\/events$/;
 
 // readOnly is the TCP listener's handler: GET and HEAD for the read routes and the dashboard, 404 for everything else, ingest included.
-export type HandlerOptions = { distDir?: string; readOnly?: boolean };
+// dailyBudgetUsd defaults to USAGE_MONITOR_DAILY_BUDGET.
+export type HandlerOptions = { distDir?: string; readOnly?: boolean; dailyBudgetUsd?: number | null };
 
 type Context = { req: IncomingMessage; res: ServerResponse; url: URL; params: string[] };
 type RouteHandler = (context: Context) => void | Promise<void>;
@@ -64,6 +65,7 @@ class HttpError extends Error {
 export function createHandler(db: DatabaseSync, options: HandlerOptions = {}) {
   const distDir = options.distDir ?? defaultDistDir;
   const readOnly = options.readOnly ?? false;
+  const dailyBudgetUsd = options.dailyBudgetUsd === undefined ? dailyBudget() : options.dailyBudgetUsd;
   const ingestBatch = createIngest(db);
   const reads = createReads(db);
 
@@ -115,6 +117,7 @@ export function createHandler(db: DatabaseSync, options: HandlerOptions = {}) {
           ),
       },
     },
+    { pattern: /^\/api\/settings$/, handlers: { GET: ({ res }) => sendJson(res, 200, { dailyBudgetUsd }) } },
     { pattern: /^\/$/, handlers: { GET: ({ res }) => serveIndex(res, distDir) } },
   ];
   const routes = readOnly ? allRoutes.filter((route) => route.pattern !== INGEST_PATH) : allRoutes;

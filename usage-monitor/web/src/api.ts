@@ -74,6 +74,11 @@ export interface Tools {
   calls: ToolCall[];
 }
 
+export interface Settings {
+  /** USD per day, or null when no budget is set. */
+  dailyBudgetUsd: number | null;
+}
+
 export class ApiError extends Error {
   readonly status?: number;
   constructor(message: string, status?: number) {
@@ -123,4 +128,8 @@ export function fetchTools(range: { session?: string; from?: number; limit?: num
   if (range.from !== undefined) params.set('from', String(range.from));
   if (range.limit !== undefined) params.set('limit', String(range.limit));
   return get(`/api/tools?${params}`, signal);
+}
+
+export function fetchSettings(signal?: AbortSignal): Promise<Settings> {
+  return get('/api/settings', signal);
 }

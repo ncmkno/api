@@ -218,4 +218,11 @@ describe('Summary', () => {
     await screen.findByRole('table', { name: 'Usage by model' });
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
+
+  it('draws the daily budget on the cost chart and says so in its note', async () => {
+    stubApi((url) => (url === '/api/settings' ? { body: { dailyBudgetUsd: 20 } } : { body: summary }));
+    renderWithTheme(<Summary />);
+    await waitFor(() => expect(screen.getByText('Estimated (est.), USD, UTC days; dashed line: $20.00 daily budget')).toBeInTheDocument());
+  });
 });
+

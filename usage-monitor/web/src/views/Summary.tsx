@@ -12,7 +12,8 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { BarChart } from '@mui/x-charts/BarChart';
-import { fetchSummary, type DayUsage, type Summary as SummaryData } from '../api';
+import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine';
+import { fetchSettings, fetchSummary, type DayUsage, type Summary as SummaryData } from '../api';
 import { HeadLabel } from '../components/HeadLabel';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
@@ -133,7 +134,7 @@ function DayTable({ days }: { days: DayUsage[] }) {
   );
 }
 
-function DayCharts({ days }: { days: DayUsage[] }) {
+function DayCharts({ days, budget }: { days: DayUsage[]; budget: number | null }) {
   const theme = useTheme();
   const palette = theme.vars?.palette ?? theme.palette;
   const accent = palette.accentFill;
@@ -164,7 +165,10 @@ function DayCharts({ days }: { days: DayUsage[] }) {
 
   return (
     <div className="relative grid grid-cols-1 gap-3 lg:grid-cols-2">
-      <ChartCard title="Cost per day" note="Estimated (est.), USD, UTC days">
+      <ChartCard
+        title="Cost per day"
+        note={`Estimated (est.), USD, UTC days${budget === null ? '' : `; dashed line: ${formatUsd(budget)} daily budget`}`}
+      >
         <BarChart
           {...common}
           series={[
@@ -175,8 +179,19 @@ function DayCharts({ days }: { days: DayUsage[] }) {
               valueFormatter: (v) => formatUsd(v),
             },
           ]}
-          yAxis={[{ valueFormatter: (v: number) => formatUsd(v), width: 64 }]}
-        />
+          // The axis reaches past the budget, so its line stays on the chart on a cheap day.
+          yAxis={[
+            {
+              valueFormatter: (v: number) => formatUsd(v),
+              width: 64,
+              ...(budget === null ? {} : { max: Math.max(budget, ...days.map((d) => d.costUsd ?? 0)) * 1.1 }),
+            },
+          ]}
+        >
+          {budget !== null && (
+            <ChartsReferenceLine y={budget} lineStyle={{ strokeDasharray: '4 4', stroke: palette.warning.main }} />
+          )}
+        </BarChart>
       </ChartCard>
       <ChartCard
         title="Tokens per day"
@@ -313,6 +328,8 @@ export function Summary() {
 
   const empty = data !== undefined && data.byDay.length === 0 && data.byModel.length === 0;
   const totals = data && totalsOf(data);
+  const settings = usePolling('summary-settings', (signal) => fetchSettings(signal), 60_000);
+  const budget = typeof settings.data?.dailyBudgetUsd === 'number' ? settings.data.dailyBudgetUsd : null;
   const rangeLabel = RANGES.find((r) => r.value === range)!.label.toLowerCase();
 
   // The window of the same length just before this one, for the cards' comparisons.
@@ -413,7 +430,7 @@ export function Summary() {
               hint={`${formatCompact(totals.input)} in · ${formatCompact(totals.output)} out`}
             />
           </div>
-          <DayCharts days={withEmptyDays(data.byDay, range, Date.now())} />
+          <DayCharts days={withEmptyDays(data.byDay, range, Date.now())} budget={budget} />
           <div className="flex flex-col gap-2">
             <Typography variant="h2" component="h2">
               By model

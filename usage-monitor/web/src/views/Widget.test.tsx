@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { T0, sessions } from '../test/fixtures';
 import { calledUrls, renderWithTheme, stubApi } from '../test/utils';
@@ -35,6 +35,7 @@ const yesterday = {
 };
 
 function api(url: string) {
+  if (url === '/api/settings') return { body: { dailyBudgetUsd: 20 } };
   if (url.startsWith('/api/summary') && url.includes('&to=')) return { body: yesterday };
   if (url.startsWith('/api/tools')) return { body: tools };
   if (url.startsWith('/api/summary')) return { body: today };
@@ -223,6 +224,35 @@ describe('Widget', () => {
     await vi.advanceTimersByTimeAsync(BUILD_CHECK_MS);
     expect(reload).toHaveBeenCalledTimes(1);
     document.querySelector('script[data-test]')?.remove();
+  });
+
+  it("shows today's cost against the daily budget as a thin progress line", async () => {
+    stubApi(api);
+    renderWithTheme(<Widget />);
+    const budget = await screen.findByRole('meter', { name: 'Daily budget' });
+    expect(budget).toHaveAttribute('aria-valuenow', '1.75');
+    expect(budget).toHaveAttribute('aria-valuemax', '20');
+    expect(budget).toHaveAttribute('aria-valuetext', '$1.75 of $20.00');
+    expect(budget).toHaveAttribute('data-level', 'ok');
+  });
+
+  it('marks the budget line as near from 80% and over past 100%', async () => {
+    stubApi((url) => (url === '/api/settings' ? { body: { dailyBudgetUsd: 2 } } : api(url)));
+    renderWithTheme(<Widget />);
+    expect(await screen.findByRole('meter', { name: 'Daily budget' })).toHaveAttribute('data-level', 'near'); // 1.75 of 2
+    cleanup();
+    stubApi((url) => (url === '/api/settings' ? { body: { dailyBudgetUsd: 1.5 } } : api(url)));
+    renderWithTheme(<Widget />);
+    const over = await screen.findByRole('meter', { name: 'Daily budget' });
+    expect(over).toHaveAttribute('data-level', 'over');
+    expect(over).toHaveAttribute('aria-valuetext', '$1.75 of $1.50, over budget');
+  });
+
+  it('shows no budget line when no budget is set', async () => {
+    stubApi((url) => (url === '/api/settings' ? { body: { dailyBudgetUsd: null } } : api(url)));
+    renderWithTheme(<Widget />);
+    await screen.findByLabelText('Cost today');
+    await waitFor(() => expect(screen.queryByRole('meter')).not.toBeInTheDocument());
   });
 });
 

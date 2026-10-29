@@ -43,7 +43,7 @@ fn main() {
             let url = format!("{}#/widget", dashboard_url()).parse().expect("valid dashboard URL");
             WebviewWindowBuilder::new(app, WIDGET, WebviewUrl::External(url))
                 .title("Usage Monitor")
-                .inner_size(300.0, 124.0)
+                .inner_size(300.0, 136.0)
                 .resizable(false)
                 .decorations(false)
                 .transparent(true)

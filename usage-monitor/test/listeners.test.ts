@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, test } from 'node:test';
 import type { DatabaseSync } from 'node:sqlite';
-import { ConfigError, projectDir, tcpPort } from '../src/config.ts';
+import { ConfigError, dailyBudget, projectDir, tcpPort } from '../src/config.ts';
 import { openDb } from '../src/db.ts';
 import { startListeners } from '../src/listeners.ts';
 
@@ -511,6 +511,26 @@ function connects(port: number, host: string): Promise<void> {
     probe.once('error', reject);
   });
 }
+
+// ---- USAGE_MONITOR_DAILY_BUDGET ---------------------------------------------------------------------
+
+describe('dailyBudget (USAGE_MONITOR_DAILY_BUDGET)', () => {
+  test('unset or empty means no budget', () => {
+    assert.equal(dailyBudget({}), null);
+    assert.equal(dailyBudget({ USAGE_MONITOR_DAILY_BUDGET: '' }), null);
+  });
+
+  test('takes a positive amount in USD, with or without cents', () => {
+    assert.equal(dailyBudget({ USAGE_MONITOR_DAILY_BUDGET: '20' }), 20);
+    assert.equal(dailyBudget({ USAGE_MONITOR_DAILY_BUDGET: '7.50' }), 7.5);
+  });
+
+  test('refuses anything else, naming the setting', () => {
+    for (const bad of ['0', '-5', 'ten', '$20', '1e3', 'Infinity']) {
+      assert.throws(() => dailyBudget({ USAGE_MONITOR_DAILY_BUDGET: bad }), (e: unknown) => e instanceof ConfigError && /USAGE_MONITOR_DAILY_BUDGET/.test(e.message));
+    }
+  });
+});
 
 // ---- USAGE_MONITOR_PORT -----------------------------------------------------------------------------
 
